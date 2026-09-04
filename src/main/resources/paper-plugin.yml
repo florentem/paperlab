@@ -1,0 +1,10 @@
+name: PaperLab
+version: '${version}'
+main: paperlab.PaperLabPlugin
+api-version: '26.2'
+description: Технический инструментарий для исследования ферм на Paper 26.2
+authors: [ oCreker ]
+
+# Боты намеренно не реализуются: для них ставится FakePlayer-CE.
+# Если он установлен, /log mobcaps и /ghost работают и с его ботами —
+# они обычные ServerPlayer.
