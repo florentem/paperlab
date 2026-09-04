@@ -37,6 +37,11 @@ public final class LabPermissions {
     public static final String SPAWN = "paperlab.spawn";
     public static final String COUNTER = "paperlab.counter";
 
+    /** Инструменты из Carpet: разбор периметра, сведения о блоке, расстояние. */
+    public static final String PERIMETER = "paperlab.perimeterinfo";
+    public static final String INFO = "paperlab.info";
+    public static final String DISTANCE = "paperlab.distance";
+
     /**
      * Ванильные отладочные подписки 26.2: пути мобов, обновления соседей, порядок
      * редстоуна, структуры, POI, brain. Их рисует MiniHUD.
@@ -70,6 +75,14 @@ public final class LabPermissions {
      */
     public static final String SERVUX_LITEMATICS = "paperlab.servux.litematics";
 
+    /**
+     * Канал servux:entity_data: NBT сущности и блока под прицелом.
+     *
+     * <p>Отдельно от HUD: видеть содержимое любого сундука в зоне видимости —
+     * заметно больше, чем видеть TPS.
+     */
+    public static final String SERVUX_ENTITIES = "paperlab.servux.entities";
+
     // --- вмешательство ---
     public static final String COUNTER_EDIT = "paperlab.counter.edit";
     public static final String GHOST = "paperlab.ghost";
@@ -99,11 +112,15 @@ public final class LabPermissions {
         NODES.put(CHUNKMAP, "chunk map for the ChunkDebug client mod");
         NODES.put(SPAWN, "spawn trace: view and control collection");
         NODES.put(COUNTER, "view hopper counters");
+        NODES.put(PERIMETER, "count spawnable spots around a point");
+        NODES.put(INFO, "block state, block entity and ticking info");
+        NODES.put(DISTANCE, "distance between two points");
         NODES.put(DEBUG_DATA, "vanilla debug subscriptions for MiniHUD without granting OP");
         NODES.put(SERVUX_HUD, "servux:hud_metadata channel for MiniHUD");
         NODES.put(SERVUX_SEED, "share the world seed over the Servux channel");
         NODES.put(SERVUX_STRUCTURES, "servux:structures channel for MiniHUD");
         NODES.put(SERVUX_LITEMATICS, "servux:litematics channel: server-side schematic paste");
+        NODES.put(SERVUX_ENTITIES, "servux:entity_data channel: entity and block entity NBT");
         NODES.put(COUNTER_EDIT, "reset counters and put hoppers under tracking");
         NODES.put(GHOST, "observer mode for yourself");
         NODES.put(GHOST_OTHER, "observer mode for another player or bot");

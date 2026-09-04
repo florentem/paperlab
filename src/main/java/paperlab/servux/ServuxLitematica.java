@@ -237,10 +237,12 @@ public final class ServuxLitematica implements PluginMessageListener {
 
         final long elapsed = System.currentTimeMillis() - started;
         plugin.getLogger().info("Servux litematics: placed " + result.placed()
-            + " blocks, skipped " + result.skipped() + ", in " + elapsed + " ms for "
-            + player.getName());
+            + " blocks, " + result.entities() + " entities, skipped " + result.skipped()
+            + ", in " + elapsed + " ms for " + player.getName());
         player.sendMessage(net.kyori.adventure.text.Component.text(
-            "PaperLab: pasted " + result.placed() + " blocks in " + elapsed + " ms",
+            "PaperLab: pasted " + result.placed() + " blocks"
+                + (result.entities() > 0 ? " and " + result.entities() + " entities" : "")
+                + " in " + elapsed + " ms",
             net.kyori.adventure.text.format.NamedTextColor.GREEN));
     }
 

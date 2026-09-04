@@ -25,9 +25,9 @@ import net.minecraft.world.level.block.state.BlockState;
  * не ломается заметно, а тихо сдвигает или разворачивает постройку.
  *
  * <h2>Что уже переносится</h2>
- * Блоки, палитра, повороты и отражения (в том числе у подрегионов), режим замены
- * и данные тайл-энтити. Сущности — нет: они требуют отдельной работы с
- * {@code EntityType.loadEntityRecursive} и правами, и без них вставка уже полезна.
+ * Блоки, палитра, повороты и отражения (в том числе у подрегионов), режим замены,
+ * данные тайл-энтити и сущности. Флаг {@code IgnoreEntities} уважается и на уровне
+ * запроса, и на уровне подрегиона.
  *
  * <h2>Про обновления соседей</h2>
  * Блоки ставятся с флагами {@code 0x12} — как это делает сама Litematica:
@@ -80,7 +80,7 @@ public final class LitematicaPaste {
     }
 
     /** Итог вставки — для отчёта в чат. */
-    public record Result(int placed, int skipped, int regions) {
+    public record Result(int placed, int skipped, int entities, int regions) {
     }
 
     private LitematicaPaste() {
@@ -96,8 +96,11 @@ public final class LitematicaPaste {
         final Mirror mainMirror = mirror(request.getIntOr("Mirror", 0));
         final Replace replace = Replace.parse(request.getStringOr("ReplaceMode", "none"));
 
+        final boolean withEntities = !request.getBooleanOr("IgnoreEntities", false);
+
         int placed = 0;
         int skipped = 0;
+        int entities = 0;
 
         for (final String name : regions.keySet()) {
             final CompoundTag region = regions.getCompoundOrEmpty(name);
@@ -121,8 +124,121 @@ public final class LitematicaPaste {
                 mainRotation, mainMirror, subRotation, subMirrorRaw, replace);
             placed += partial.placed();
             skipped += partial.skipped();
+
+            // Подрегион может запрещать сущности отдельно от общего флага запроса.
+            if (withEntities && !sub.getBooleanOr("IgnoreEntities", false)) {
+                entities += pasteEntities(level, region, origin, regionPos,
+                    mainRotation, mainMirror, subRotation, subMirrorRaw);
+            }
         }
-        return new Result(placed, skipped, regions.size());
+        return new Result(placed, skipped, entities, regions.size());
+    }
+
+    /**
+     * Сущности региона.
+     *
+     * <p>Позиция сущности хранится в её же NBT полем {@code Pos} и отсчитывается от угла
+     * региона. Преобразование — как у блоков, но в дробных координатах: у Litematica это
+     * {@code getTransformedPosition}, где отражение считается от единицы, а не от нуля,
+     * потому что речь про точку внутри клетки, а не про саму клетку.
+     *
+     * <p>Смещение здесь <b>без</b> поправки на минимальный угол: у сущностей координата
+     * уже абсолютна внутри региона.
+     */
+    private static int pasteEntities(final ServerLevel level,
+                                     final CompoundTag region,
+                                     final BlockPos origin,
+                                     final BlockPos regionPos,
+                                     final Rotation mainRotation,
+                                     final Mirror mainMirror,
+                                     final Rotation subRotation,
+                                     final Mirror subMirrorRaw) {
+        final ListTag list = region.getListOrEmpty("Entities");
+        if (list.isEmpty()) {
+            return 0;
+        }
+        final BlockPos regionPosTransformed = transform(regionPos, mainMirror, mainRotation);
+        final int offX = regionPosTransformed.getX() + origin.getX();
+        final int offY = regionPosTransformed.getY() + origin.getY();
+        final int offZ = regionPosTransformed.getZ() + origin.getZ();
+
+        Mirror subMirror = subMirrorRaw;
+        if (subMirror != Mirror.NONE
+            && (mainRotation == Rotation.CLOCKWISE_90 || mainRotation == Rotation.COUNTERCLOCKWISE_90)) {
+            subMirror = subMirror == Mirror.FRONT_BACK ? Mirror.LEFT_RIGHT : Mirror.FRONT_BACK;
+        }
+
+        int spawned = 0;
+        for (int i = 0; i < list.size(); i++) {
+            final CompoundTag tag = list.getCompoundOrEmpty(i);
+            final net.minecraft.world.phys.Vec3 stored = readPos(tag);
+            if (stored == null) {
+                continue;
+            }
+            net.minecraft.world.phys.Vec3 pos = transform(stored, mainMirror, mainRotation);
+            pos = transform(pos, subMirror, subRotation);
+            final double x = pos.x + offX;
+            final double y = pos.y + offY;
+            final double z = pos.z + offZ;
+
+            try {
+                final net.minecraft.world.entity.Entity entity =
+                    net.minecraft.world.entity.EntityType.loadEntityRecursive(
+                        tag, level,
+                        new net.minecraft.world.entity.EntitySpawnRequest(
+                            net.minecraft.world.entity.EntitySpawnReason.COMMAND, false),
+                        loaded -> {
+                            loaded.snapTo(x, y, z, loaded.getYRot(), loaded.getXRot());
+                            return loaded;
+                        });
+                if (entity != null) {
+                    // Метод не возвращает результат: сущность либо добавится, либо будет
+                    // отброшена движком. Считаем попытки — точнее отсюда не узнать.
+                    level.addFreshEntityWithPassengers(entity);
+                    spawned++;
+                }
+            } catch (final Throwable ignored) {
+                // Одна испорченная сущность не должна срывать всю вставку.
+            }
+        }
+        return spawned;
+    }
+
+    private static net.minecraft.world.phys.@org.jetbrains.annotations.Nullable Vec3 readPos(
+        final CompoundTag tag) {
+        final ListTag pos = tag.getListOrEmpty("Pos");
+        if (pos.size() < 3) {
+            return null;
+        }
+        return new net.minecraft.world.phys.Vec3(
+            pos.getDoubleOr(0, 0.0D), pos.getDoubleOr(1, 0.0D), pos.getDoubleOr(2, 0.0D));
+    }
+
+    /**
+     * {@code PositionUtils.getTransformedPosition} — дробный вариант.
+     *
+     * <p>Отражение считается от единицы: точка внутри клетки при зеркалировании должна
+     * остаться внутри той же клетки, а не уехать на её край.
+     */
+    private static net.minecraft.world.phys.Vec3 transform(
+        final net.minecraft.world.phys.Vec3 pos, final Mirror mirror, final Rotation rotation) {
+        double x = pos.x;
+        final double y = pos.y;
+        double z = pos.z;
+        boolean transformed = true;
+
+        switch (mirror) {
+            case LEFT_RIGHT -> z = 1.0D - z;
+            case FRONT_BACK -> x = 1.0D - x;
+            default -> transformed = false;
+        }
+
+        return switch (rotation) {
+            case COUNTERCLOCKWISE_90 -> new net.minecraft.world.phys.Vec3(z, y, 1.0D - x);
+            case CLOCKWISE_90 -> new net.minecraft.world.phys.Vec3(1.0D - z, y, x);
+            case CLOCKWISE_180 -> new net.minecraft.world.phys.Vec3(1.0D - x, y, 1.0D - z);
+            default -> transformed ? new net.minecraft.world.phys.Vec3(x, y, z) : pos;
+        };
     }
 
     private static Result pasteRegion(final ServerLevel level,
@@ -137,11 +253,11 @@ public final class LitematicaPaste {
                                       final Replace replace) {
         final BlockState[] palette = readPalette(level, region.getListOrEmpty("BlockStatePalette"));
         if (palette.length == 0) {
-            return new Result(0, 0, 0);
+            return new Result(0, 0, 0, 0);
         }
         final long[] blockStates = region.getLongArray("BlockStates").orElse(new long[0]);
         if (blockStates.length == 0) {
-            return new Result(0, 0, 0);
+            return new Result(0, 0, 0, 0);
         }
 
         final int sizeX = Math.abs(regionSize.getX());
@@ -237,7 +353,7 @@ public final class LitematicaPaste {
                 }
             }
         }
-        return new Result(placed, skipped, 1);
+        return new Result(placed, skipped, 0, 1);
     }
 
     /** Данные тайл-энтити: координаты в них региональные, заменяем на мировые. */

@@ -68,6 +68,7 @@ public final class PaperLabPlugin extends JavaPlugin implements Listener {
         paperlab.servux.ServuxHud.enable(this);
         paperlab.servux.ServuxStructures.enable(this);
         paperlab.servux.ServuxLitematica.enable(this);
+        paperlab.servux.ServuxEntities.enable(this);
 
         // Один общий тик: счётчики каждый тик, HUD раз в секунду (решает сам LabHud).
         Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> {
@@ -87,6 +88,7 @@ public final class PaperLabPlugin extends JavaPlugin implements Listener {
         paperlab.servux.ServuxHud.disable();
         paperlab.servux.ServuxStructures.disable();
         paperlab.servux.ServuxLitematica.disable();
+        paperlab.servux.ServuxEntities.disable();
         LabGhost.restoreAll();
         // Правила меняют поведение мира: снимать их обязательно, иначе выключенный
         // плагин оставит после себя изменённый сервер.
@@ -114,6 +116,7 @@ public final class PaperLabPlugin extends JavaPlugin implements Listener {
         paperlab.servux.ServuxHud.onQuit(event.getPlayer());
         paperlab.servux.ServuxStructures.onQuit(event.getPlayer());
         paperlab.servux.ServuxLitematica.onQuit(event.getPlayer());
+        paperlab.servux.ServuxEntities.onQuit(event.getPlayer());
         LabGhost.onDisconnect(event.getPlayer());
     }
 }

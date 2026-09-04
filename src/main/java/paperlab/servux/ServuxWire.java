@@ -228,6 +228,17 @@ public final class ServuxWire {
         return out.toString().trim();
     }
 
+    /**
+     * Дописать тело в кадре malilib: {@code varint(-1)} и следом сетевой NBT.
+     *
+     * <p>Минус единица — то, что malilib пишет вместо длины. Установлено по дампу
+     * настоящего пакета Litematica: {@code ff ff ff ff 0f | 0a | ...}.
+     */
+    public static void appendNbtBody(final FriendlyByteBuf buf, final CompoundTag tag) {
+        buf.writeVarInt(-1);
+        buf.writeNbt(tag);
+    }
+
     /** Собрать metadata-кадр. */
     public static byte[] metadata(final int type, final CompoundTag tag) {
         final FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());

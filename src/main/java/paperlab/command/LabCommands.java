@@ -50,7 +50,10 @@ public final class LabCommands {
         new Entry("/log", LabLogCommand.HELP),
         new Entry("/counter", LabMiscCommands.COUNTER_HELP),
         new Entry("/player", "bots: spawn, actions, kill"),
-        new Entry("/tick toggle", LabMiscCommands.TICK_HELP));
+        new Entry("/tick toggle", LabMiscCommands.TICK_HELP),
+        new Entry("/perimeterinfo", LabInfoCommands.PERIMETER_HELP),
+        new Entry("/info block", LabInfoCommands.INFO_HELP),
+        new Entry("/distance", LabInfoCommands.DISTANCE_HELP));
 
     private LabCommands() {
     }
@@ -75,6 +78,12 @@ public final class LabCommands {
             registrar.register(LabLogCommand.node("log").build(), LabLogCommand.HELP);
             registrar.register(LabMiscCommands.counterNode("counter").build(),
                 LabMiscCommands.COUNTER_HELP);
+            registrar.register(LabInfoCommands.perimeterNode("perimeterinfo").build(),
+                LabInfoCommands.PERIMETER_HELP);
+            registrar.register(LabInfoCommands.infoNode("info").build(),
+                LabInfoCommands.INFO_HELP);
+            registrar.register(LabInfoCommands.distanceNode("distance").build(),
+                LabInfoCommands.DISTANCE_HELP);
 
             // Наши — ещё и верхним уровнем, чтобы писать напрямую. Имя chunks наверху
             // занято ванилью, поэтому там префикс.
