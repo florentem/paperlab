@@ -153,6 +153,30 @@ public final class LabRules {
             }
         }));
 
+    /**
+     * Независимый тикрейт, заморозка и спринт по мирам (/tick freeze, rate и т.д.).
+     *
+     * <p>При включении каждый мир тикает независимо со своим ServerLevelTickRateManager.
+     * При выключении все миры синхронизируются с Overworld и сервером.
+     */
+    public static final LabRule<Boolean> PER_WORLD_TICK = register(new LabRule<>(
+        "perWorldTick",
+        "independent tick rate, freeze and sprint per world/dimension",
+        "allows /tick commands to execute independently per dimension",
+        Boolean.FALSE,
+        List.of("false", "true"),
+        BOOLEAN,
+        PLAIN::apply,
+        value -> null,
+        value -> {
+            if (CoreBridge.PRESENT) {
+                final org.bukkit.Server bServer = org.bukkit.Bukkit.getServer();
+                final net.minecraft.server.MinecraftServer server =
+                    (bServer instanceof final org.bukkit.craftbukkit.CraftServer cs) ? cs.getServer() : null;
+                io.papermc.paper.lab.tick.LabPerWorldTick.setEnabled(value, server);
+            }
+        }));
+
     private LabRules() {
     }
 
