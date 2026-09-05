@@ -43,7 +43,7 @@ public final class CPlayWire {
         int count = 0;
         do {
             if (count >= 5) {
-                throw new RuntimeException("VarInt too big");
+                throw new IllegalArgumentException("VarInt too big");
             }
             data = buf.readByte();
             value |= (data & 0x7F) << (7 * count);
