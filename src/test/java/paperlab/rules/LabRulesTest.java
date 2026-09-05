@@ -60,4 +60,19 @@ public class LabRulesTest {
         reloadedAfterRemove.load();
         assertFalse(reloadedAfterRemove.has("perWorldTick"));
     }
+
+    @Test
+    public void testApplyAllAndResetAllDormantState() {
+        LabRules.applyAll();
+        assertTrue(io.papermc.paper.lab.rules.LabRuleState.playerCommandEnabled,
+            "playerCommandEnabled should be true after applyAll");
+        assertTrue(io.papermc.paper.lab.rules.LabRuleState.tickCommandCarpetfied,
+            "tickCommandCarpetfied should be true after applyAll");
+
+        LabRules.resetAll();
+        assertFalse(io.papermc.paper.lab.rules.LabRuleState.playerCommandEnabled,
+            "playerCommandEnabled should be false after resetAll (dormant)");
+        assertFalse(io.papermc.paper.lab.rules.LabRuleState.tickCommandCarpetfied,
+            "tickCommandCarpetfied should be false after resetAll (dormant)");
+    }
 }

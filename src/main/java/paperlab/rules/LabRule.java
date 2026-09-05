@@ -123,6 +123,11 @@ public final class LabRule<T> {
         this.apply.accept(this.vanilla);
     }
 
+    /** Передать текущее значение в ядро без изменения. */
+    public void reapply() {
+        this.apply.accept(this.value);
+    }
+
     /** Право на это правило. */
     public String permission() {
         return "paperlab.rule." + this.name.toLowerCase(java.util.Locale.ROOT);

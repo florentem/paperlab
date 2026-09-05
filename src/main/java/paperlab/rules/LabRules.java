@@ -223,6 +223,26 @@ public final class LabRules {
         for (final LabRule<?> rule : RULES.values()) {
             rule.reset();
         }
+        // Ядро по умолчанию «спит» — команды выключены. Возвращаем их в спящее состояние.
+        if (CoreBridge.PRESENT) {
+            io.papermc.paper.lab.rules.LabRuleState.playerCommandEnabled = false;
+            io.papermc.paper.lab.rules.LabRuleState.tickCommandCarpetfied = false;
+        }
+    }
+
+    /**
+     * Передать текущие значения всех правил в ядро. Вызывается при включении плагина,
+     * потому что ядро по умолчанию «спит»: все флаги выключены до тех пор, пока плагин
+     * явно не установит нужные значения.
+     */
+    public static void applyAll() {
+        for (final LabRule<?> rule : RULES.values()) {
+            rule.reapply();
+        }
+        // Команды /player и /tick toggle|warp — включаем при наличии ядра.
+        if (CoreBridge.PRESENT) {
+            io.papermc.paper.lab.rules.LabRuleState.playerCommandEnabled = true;
+        }
     }
 
     /** Применить сохранённые значения по умолчанию. Вызывается при включении плагина. */

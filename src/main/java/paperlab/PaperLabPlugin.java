@@ -52,6 +52,7 @@ public final class PaperLabPlugin extends JavaPlugin implements Listener {
         this.ruleDefaults.load();
         paperlab.command.RuleCommands.bind(this.ruleDefaults);
         paperlab.rules.LabRules.applyDefaults(this.ruleDefaults, this.getLogger()::info);
+        paperlab.rules.LabRules.applyAll();
 
         // Права регистрируем до команд: их requires уже спрашивают эти узлы.
         paperlab.command.LabPermissions.register();
