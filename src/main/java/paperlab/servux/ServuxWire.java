@@ -248,24 +248,22 @@ public final class ServuxWire {
     }
 
     /**
-     * Собрать обычный кадр.
+     * Собрать data-кадр Servux: varint(type) + int(длина) + GZIP-поток именованного NBT (корень "").
      *
-     * <p><b>Кадр тот же, что у metadata: сетевой NBT.</b> Это выяснилось дорого. Servux
-     * пишет «длина + GZIP» и читает его же, и я повторил за ним — но клиент берёт кодек
-     * из malilib, а там сетевой NBT. Клиент прочитал наш NBT-заголовок, остаток не тронул,
-     * и ванильный декодер убил соединение:
-     *
-     * <pre>
-     * Packet play/clientbound/minecraft:custom_payload was larger than I expected,
-     * found 104 bytes extra
-     * </pre>
-     *
-     * <p>Урок общий: сверять кадрирование нужно с <b>клиентским</b> кодом, а не с серверным.
-     * Мод и его серверная часть писались не совсем согласованно, и расходятся они молча —
-     * до того момента, когда рвут соединение.
+     * <p>Именно этого формата ожидает MiniHUD в {@code ServuxHudPacket.fromPacket}
+     * для типов {@code S2C_SPAWN_DATA} (3), {@code S2C_WEATHER_TICK} (5) и
+     * {@code S2C_DATA_LOGGER_TICK} (7) через {@code DataByteBufUtils.fromByteBuf}.
      */
-    public static byte[] data(final int type, final CompoundTag tag) {
-        return metadata(type, tag);
+    public static byte[] data(final int type, final CompoundTag tag) throws IOException {
+        final java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+        NbtIo.writeCompressed(tag, baos);
+        final byte[] compressed = baos.toByteArray();
+
+        final FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
+        buf.writeVarInt(type);
+        buf.writeInt(compressed.length);
+        buf.writeBytes(compressed);
+        return drain(buf);
     }
 
     private static byte[] drain(final FriendlyByteBuf buf) {

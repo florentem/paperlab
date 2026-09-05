@@ -270,7 +270,7 @@ public final class ServuxHud implements PluginMessageListener {
                     tag.put(LOGGER_TPS, tpsData());
                 }
                 if (wanted.contains(LOGGER_MOB_CAPS)) {
-                    tag.put(LOGGER_MOB_CAPS, mobCapData(player));
+                    tag.put(LOGGER_MOB_CAPS, mobCapData());
                 }
                 send(player, ServuxWire.data(S2C_DATA_LOGGER_TICK, tag));
             } catch (final Throwable t) {
@@ -295,20 +295,32 @@ public final class ServuxHud implements PluginMessageListener {
         }
     }
 
-    private static CompoundTag weatherData(final Player player) {
-        final org.bukkit.World world = player.getWorld();
+    public static CompoundTag weatherData(final Player player) {
+        final org.bukkit.World world = Bukkit.getWorlds().isEmpty()
+            ? (player != null ? player.getWorld() : null)
+            : Bukkit.getWorlds().get(0);
         final CompoundTag tag = new CompoundTag();
-        final boolean raining = world.hasStorm();
-        final int rainTime = world.getWeatherDuration();
-        final boolean thundering = world.isThundering();
-        final int thunderTime = world.getThunderDuration();
-        final int clearTime = world.getClearWeatherDuration();
+        if (world == null) {
+            tag.putBoolean("isRaining", false);
+            tag.putBoolean("isThundering", false);
+            tag.putInt("SetClear", 24000);
+            return tag;
+        }
+        final ServerLevel overworld = ((CraftWorld) world).getHandle();
+        final boolean raining = overworld.isRaining();
+        final boolean thundering = overworld.isThundering();
+        final var nmsWeather = overworld.getWeatherData();
+        final int clearTime = nmsWeather.getClearWeatherTime();
+        final int rainTime = nmsWeather.getRainTime();
+        final int thunderTime = nmsWeather.getThunderTime();
 
         if (raining && rainTime > -1) {
             tag.putInt("SetRaining", rainTime);
             tag.putBoolean("isRaining", true);
         } else {
             tag.putBoolean("isRaining", false);
+            final int clearRemaining = clearTime > 0 ? clearTime : (rainTime > 0 ? rainTime : 0);
+            tag.putInt("SetClear", clearRemaining);
         }
 
         if (thundering && thunderTime > -1) {
@@ -318,13 +330,10 @@ public final class ServuxHud implements PluginMessageListener {
             tag.putBoolean("isThundering", false);
         }
 
-        if (clearTime > -1) {
-            tag.putInt("SetClear", clearTime);
-        }
         return tag;
     }
 
-    private static CompoundTag tpsData() {
+    public static CompoundTag tpsData() {
         final var manager = Bukkit.getServerTickManager();
         final CompoundTag tag = new CompoundTag();
         tag.putDouble("mspt", Bukkit.getAverageTickTime());
@@ -338,41 +347,42 @@ public final class ServuxHud implements PluginMessageListener {
     }
 
     /**
-     * Мобкапы в том виде, в каком их ждёт MiniHUD, — <b>мировые</b>, по ванильной формуле
-     * {@code maxPerChunk * пригодных чанков / 289}.
-     *
-     * <p><b>Важно, что это не тот кап, который на Paper решает.</b> При
-     * {@code per-player-mob-spawns} спавн гасит локальный кап каждого игрока, а не эта
-     * мировая сумма; она остаётся справочной. Настоящий, решающий кап показывает наш
-     * {@code /log mobcaps} — и цифры там законно другие.
-     *
-     * <p>Отдаём всё равно: у MiniHUD это штатная строка HUD, а расхождение объясняется
-     * один раз и дальше читается правильно.
+     * Мобкапы в том виде, в каком их ждёт MiniHUD.
+     * MiniHUD ожидает компаунд сопоставлений dimKey -> { WorldTick, cap_count, cap_data: [...] }.
+     * Каждая запись cap_data содержит { current, cap }.
      */
-    private static CompoundTag mobCapData(final Player player) {
-        final ServerLevel level = ((CraftWorld) player.getWorld()).getHandle();
-        final NaturalSpawner.SpawnState state = level.getChunkSource().getLastSpawnState();
+    public static CompoundTag mobCapData() {
+        final CompoundTag root = new CompoundTag();
+        for (final org.bukkit.World bukkitWorld : Bukkit.getWorlds()) {
+            final ServerLevel world = ((CraftWorld) bukkitWorld).getHandle();
+            final String dimKey = world.dimension().identifier().toString();
+            final NaturalSpawner.SpawnState state = world.getChunkSource().getLastSpawnState();
 
-        final ListTag caps = new ListTag();
-        // Порядок обязан совпадать с MobCapData.EntityCategory: клиент читает список
-        // по индексу, а не по имени.
-        for (final MobCategory category : MobCategory.values()) {
-            final CompoundTag cap = new CompoundTag();
-            if (state == null) {
-                cap.putInt("current", 0);
-                cap.putInt("cap", 0);
-            } else {
-                cap.putInt("current", state.getMobCategoryCounts().getInt(category));
-                cap.putInt("cap", category.getMaxInstancesPerChunk()
-                    * state.getSpawnableChunkCount() / SPAWN_AREA_CHUNKS);
+            final ListTag caps = new ListTag();
+            final int spawnableChunks = state != null ? state.getSpawnableChunkCount() : 0;
+
+            for (final MobCategory category : MobCategory.values()) {
+                final CompoundTag cap = new CompoundTag();
+                if (state == null || spawnableChunks <= 0) {
+                    cap.putInt("current", 0);
+                    cap.putInt("cap", 0);
+                } else {
+                    final int current = state.getMobCategoryCounts().getInt(category);
+                    final int capacity = category.getMaxInstancesPerChunk() * spawnableChunks / SPAWN_AREA_CHUNKS;
+                    cap.putInt("current", current);
+                    cap.putInt("cap", capacity);
+                }
+                caps.add(cap);
             }
-            caps.add(cap);
-        }
 
-        final CompoundTag tag = new CompoundTag();
-        tag.putInt("cap_count", MobCategory.values().length);
-        tag.put("cap_data", caps);
-        return tag;
+            final CompoundTag nbtEntry = new CompoundTag();
+            nbtEntry.putLong("WorldTick", world.getGameTime());
+            nbtEntry.putInt("cap_count", MobCategory.values().length);
+            nbtEntry.put("cap_data", caps);
+
+            root.put(dimKey, nbtEntry);
+        }
+        return root;
     }
 
     /**
