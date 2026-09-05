@@ -86,7 +86,7 @@ public final class CPlayService implements PluginMessageListener {
 
             // 3. Регистрируем игрока в кэше и объявляем остальным
             instance.assetStore.getPlayerCache().put(player.getUniqueId(), player.getName());
-            instance.assetStore.savePlayers();
+            Bukkit.getAsyncScheduler().runNow(instance.plugin, t -> instance.assetStore.savePlayers());
             broadcast(CPlayWire.encodePlayerCacheAdded(player.getUniqueId(), player.getName()), player);
         }, 1L);
     }

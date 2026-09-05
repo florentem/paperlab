@@ -271,6 +271,7 @@ public final class ServuxWire {
     private static byte[] drain(final FriendlyByteBuf buf) {
         final byte[] out = new byte[buf.readableBytes()];
         buf.readBytes(out);
+        buf.release();
         return out;
     }
 }

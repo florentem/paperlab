@@ -12,6 +12,7 @@ import org.bukkit.entity.Player;
 import paperlab.log.LabLoggers;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
  * Логгер микротаймингов редстоуна (/log microtiming).
@@ -34,7 +35,7 @@ public final class MicroTimingLogger {
                              int depth) {
     }
 
-    private static final List<MicroEvent> CURRENT_TICK_EVENTS = new ArrayList<>();
+    private static final Queue<MicroEvent> CURRENT_TICK_EVENTS = new ConcurrentLinkedQueue<>();
     private static long lastFlushTime = -1;
 
     private MicroTimingLogger() {
@@ -44,7 +45,7 @@ public final class MicroTimingLogger {
         return LabLoggers.MICROTIMING.hasSubscribers();
     }
 
-    public static synchronized void recordEvent(final long gameTime, final String dim,
+    public static void recordEvent(final long gameTime, final String dim,
                                                 final int x, final int y, final int z,
                                                 final DyeColor color, final String blockName,
                                                 final String action, final String details,
@@ -53,11 +54,15 @@ public final class MicroTimingLogger {
         CURRENT_TICK_EVENTS.add(new MicroEvent(gameTime, dim, x, y, z, color, blockName, action, details, depth));
     }
 
-    public static synchronized void flushTick() {
+    public static void flushTick() {
         if (CURRENT_TICK_EVENTS.isEmpty()) return;
 
-        final List<MicroEvent> events = List.copyOf(CURRENT_TICK_EVENTS);
-        CURRENT_TICK_EVENTS.clear();
+        final List<MicroEvent> events = new ArrayList<>();
+        MicroEvent ev;
+        while ((ev = CURRENT_TICK_EVENTS.poll()) != null) {
+            events.add(ev);
+        }
+        if (events.isEmpty()) return;
 
         for (final var entry : LabLoggers.MICROTIMING.subscribers().entrySet()) {
             final Player player = Bukkit.getPlayerExact(entry.getKey());

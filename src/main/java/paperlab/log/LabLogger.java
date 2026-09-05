@@ -1,12 +1,12 @@
 package paperlab.log;
 
 import java.util.Collection;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
@@ -32,7 +32,7 @@ public final class LabLogger {
     private final boolean freeform;
 
     /** ник подписчика → упорядоченный набор его опций. */
-    private final Map<String, LinkedHashSet<String>> subscribers = new LinkedHashMap<>();
+    private final Map<String, LinkedHashSet<String>> subscribers = new ConcurrentHashMap<>();
 
     LabLogger(final String name, final boolean freeform, final String defaultOption, final List<String> options) {
         this.name = name;

@@ -1,10 +1,10 @@
 package paperlab.servux;
 
 import java.io.IOException;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -76,7 +76,7 @@ public final class ServuxStructures implements PluginMessageListener {
 
     private static final boolean DEBUG = Boolean.getBoolean("paperlab.servux.debug");
 
-    private static final Set<UUID> REGISTERED = new HashSet<>();
+    private static final Set<UUID> REGISTERED = ConcurrentHashMap.newKeySet();
     private static Plugin plugin;
 
     public static void enable(final Plugin owner) {

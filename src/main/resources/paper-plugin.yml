@@ -8,3 +8,9 @@ authors: [ oCreker ]
 # Боты намеренно не реализуются: для них ставится FakePlayer-CE.
 # Если он установлен, /log mobcaps и /ghost работают и с его ботами —
 # они обычные ServerPlayer.
+
+dependencies:
+  server:
+    LitematicaFolia:
+      load: BEFORE
+      required: false

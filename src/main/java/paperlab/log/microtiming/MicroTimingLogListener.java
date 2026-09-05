@@ -35,6 +35,7 @@ public final class MicroTimingLogListener implements Listener {
                                                final net.minecraft.world.level.block.state.BlockState oldState,
                                                final net.minecraft.world.level.block.state.BlockState newState,
                                                final net.minecraft.world.item.DyeColor color) {
+                    if (!MicroTimingLogger.hasSubscribers()) return;
                     final String dim = level.dimension().identifier().toString();
                     final String name = newState.getBlock().getName().getString();
                     final String diff = describeChange(oldState, newState);
@@ -46,6 +47,7 @@ public final class MicroTimingLogListener implements Listener {
                 public void onBlockEvent(final net.minecraft.world.level.Level level, final net.minecraft.core.BlockPos pos,
                                          final net.minecraft.world.level.block.Block block, final int type, final int data,
                                          final net.minecraft.world.item.DyeColor color) {
+                    if (!MicroTimingLogger.hasSubscribers()) return;
                     final String dim = level.dimension().identifier().toString();
                     final String name = block.getName().getString();
                     final String action = type == 0 ? "push" : (type == 1 || type == 2 ? "retract" : "block event");
@@ -57,6 +59,7 @@ public final class MicroTimingLogListener implements Listener {
                 public void onTileTick(final net.minecraft.world.level.Level level, final net.minecraft.core.BlockPos pos,
                                        final net.minecraft.world.level.block.Block block,
                                        final net.minecraft.world.item.DyeColor color) {
+                    if (!MicroTimingLogger.hasSubscribers()) return;
                     final String dim = level.dimension().identifier().toString();
                     final String name = block.getName().getString();
                     MicroTimingLogger.recordEvent(level.getGameTime(), dim, pos.getX(), pos.getY(), pos.getZ(),

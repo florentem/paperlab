@@ -1,9 +1,9 @@
 package paperlab.servux;
 
 import io.netty.buffer.Unpooled;
-import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
@@ -70,7 +70,7 @@ public final class ServuxEntities implements PluginMessageListener {
 
     private static final boolean DEBUG = Boolean.getBoolean("paperlab.servux.debug");
 
-    private static final Set<UUID> REGISTERED = new HashSet<>();
+    private static final Set<UUID> REGISTERED = ConcurrentHashMap.newKeySet();
     private static Plugin plugin;
 
     public static void enable(final Plugin owner) {
@@ -231,6 +231,7 @@ public final class ServuxEntities implements PluginMessageListener {
     private static byte[] drain(final FriendlyByteBuf buf) {
         final byte[] out = new byte[buf.readableBytes()];
         buf.readBytes(out);
+        buf.release();
         return out;
     }
 

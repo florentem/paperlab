@@ -1,12 +1,11 @@
 package paperlab.servux;
 
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.SharedConstants;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
@@ -73,10 +72,10 @@ public final class ServuxHud implements PluginMessageListener {
 
     private static final boolean DEBUG = Boolean.getBoolean("paperlab.servux.debug");
 
-    private static final Set<UUID> REGISTERED = new HashSet<>();
+    private static final Set<UUID> REGISTERED = ConcurrentHashMap.newKeySet();
 
     /** Кто на какие логгеры подписан. Имена — как в протоколе Servux. */
-    private static final Map<UUID, Set<String>> LOGGERS = new HashMap<>();
+    private static final Map<UUID, Set<String>> LOGGERS = new ConcurrentHashMap<>();
 
     private static final String LOGGER_TPS = "tps";
     private static final String LOGGER_MOB_CAPS = "mob_caps";
@@ -90,7 +89,7 @@ public final class ServuxHud implements PluginMessageListener {
     /** Делитель площади в ванильной формуле глобального капа: 17 x 17 чанков. */
     private static final int SPAWN_AREA_CHUNKS = 17 * 17;
 
-    private static int tickCounter;
+    private static long tickCounter;
     private static Plugin plugin;
 
     /**
@@ -296,7 +295,7 @@ public final class ServuxHud implements PluginMessageListener {
         }
     }
 
-    public static CompoundTag weatherData(final Player player) {
+    private static CompoundTag weatherData(final Player player) {
         final org.bukkit.World world = player.getWorld();
         final CompoundTag tag = new CompoundTag();
         final boolean raining = world.hasStorm();
