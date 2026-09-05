@@ -26,9 +26,95 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 public class ServuxHudDifferentialTest {
 
+    private static final int S2C_METADATA = 1;
     private static final int S2C_SPAWN_DATA = 3;
     private static final int S2C_WEATHER_TICK = 5;
     private static final int S2C_DATA_LOGGER_TICK = 7;
+
+    @Test
+    @DisplayName("Дифференциальный тест Handshake: PaperLab Metadata -> Оригинальный парсер и валидация MiniHUD")
+    public void testMetadataPacketHandshakeValidation() {
+        final CompoundTag tag = new CompoundTag();
+        tag.putString("name", "hud_data");
+        tag.putString("id", "servux:hud_metadata");
+        tag.putInt("version", 3);
+        tag.putString("servux", "servux-fabric-26.2-paperlab");
+        tag.putString("spawnDimension", "minecraft:overworld");
+        tag.putInt("spawnPosX", 0);
+        tag.putInt("spawnPosY", 64);
+        tag.putInt("spawnPosZ", 0);
+
+        final CompoundTag loggers = new CompoundTag();
+        loggers.putBoolean("tps", true);
+        loggers.putBoolean("mob_caps", true);
+        tag.put("Loggers", loggers);
+
+        // Кодируем сетевым NBT PaperLab
+        final byte[] wire = ServuxWire.metadata(S2C_METADATA, tag);
+
+        // Декодируем оригинальным парсером ServuxHudPacket.fromPacket
+        final FriendlyByteBuf inBuf = new FriendlyByteBuf(Unpooled.wrappedBuffer(wire));
+        final ServuxHudPacket packet = ServuxHudPacket.fromPacket(inBuf);
+
+        assertNotNull(packet);
+        assertEquals(ServuxHudPacket.Type.PACKET_S2C_METADATA, packet.getType());
+        assertFalse(inBuf.isReadable());
+
+        // Точная проверка условий MiniHUD HudDataManager.receiveMetadata
+        final CompoundData data = packet.getCompound();
+        final int version = data.getIntOrDefault("version", -1);
+        final String servux = data.getStringOrDefault("servux", "?");
+
+        assertEquals(3, version);
+        assertTrue(servux.startsWith("servux-fabric-26.2"), "MiniHUD требует префикс 'servux-fabric-26.2'");
+        assertEquals("hud_data", data.getStringOrDefault("name", ""));
+        assertEquals("servux:hud_metadata", data.getStringOrDefault("id", ""));
+
+        final CompoundData readLoggers = data.getCompoundOrDefault("Loggers", new CompoundData());
+        assertTrue(readLoggers.getBooleanOrDefault("tps", false));
+        assertTrue(readLoggers.getBooleanOrDefault("mob_caps", false));
+    }
+
+    @Test
+    @DisplayName("Дифференциальный тест Weather: Дождь и гроза (SetRaining, SetThundering) -> MiniHUD логика")
+    public void testRainAndThunderWeatherIntegration() throws IOException {
+        final CompoundTag thunderWeatherTag = new CompoundTag();
+        thunderWeatherTag.putBoolean("isRaining", true);
+        thunderWeatherTag.putBoolean("isThundering", true);
+        thunderWeatherTag.putInt("SetRaining", 12500);
+        thunderWeatherTag.putInt("SetThundering", 6400);
+
+        final byte[] wire = ServuxWire.data(S2C_WEATHER_TICK, thunderWeatherTag);
+        final FriendlyByteBuf inBuf = new FriendlyByteBuf(Unpooled.wrappedBuffer(wire));
+        final ServuxHudPacket parsed = ServuxHudPacket.fromPacket(inBuf);
+
+        assertNotNull(parsed);
+        assertEquals(ServuxHudPacket.Type.PACKET_S2C_WEATHER_TICK, parsed.getType());
+        assertFalse(inBuf.isReadable());
+
+        final CompoundData data = parsed.getCompound();
+        assertTrue(data.getBooleanOrDefault("isRaining", false));
+        assertTrue(data.getBooleanOrDefault("isThundering", false));
+        assertEquals(12500, data.getIntOrDefault("SetRaining", -1));
+        assertEquals(6400, data.getIntOrDefault("SetThundering", -1));
+
+        // Эмуляция логики MiniHUD HudDataManager.receiveWeatherData
+        boolean isRaining = data.getBooleanOrDefault("isRaining", false);
+        boolean isThundering = data.getBooleanOrDefault("isThundering", false);
+        int rainTime = data.getIntOrDefault("SetRaining", -1);
+        int thunderTime = data.getIntOrDefault("SetThundering", -1);
+
+        assertTrue(isRaining && isThundering);
+        assertEquals(12500, rainTime);
+        assertEquals(6400, thunderTime);
+
+        // Эмуляция InfoLineWeather:
+        String weatherType = (isThundering && isRaining) ? "thundering" : (isRaining ? "raining" : "clear");
+        int weatherTime = (isThundering && isRaining) ? thunderTime : (isRaining ? rainTime : -1);
+
+        assertEquals("thundering", weatherType);
+        assertEquals(6400, weatherTime);
+    }
 
     @Test
     @DisplayName("Дифференциальный тест Weather: PaperLab Wire Encoder -> Оригинальный парсер ServuxHudPacket.fromPacket")
@@ -188,7 +274,7 @@ public class ServuxHudDifferentialTest {
             weatherTag.putBoolean("isThundering", thundering);
             weatherTag.putInt("SetClear", clearTimer);
             weatherTag.putInt("SetRaining", rainTimer);
-            weatherTag.putInt("SetThunder", thunderTimer);
+            weatherTag.putInt("SetThundering", thunderTimer);
 
             final byte[] wire = ServuxWire.data(S2C_WEATHER_TICK, weatherTag);
             final FriendlyByteBuf inBuf = new FriendlyByteBuf(Unpooled.wrappedBuffer(wire));
@@ -203,7 +289,7 @@ public class ServuxHudDifferentialTest {
             assertEquals(thundering, cd.getBooleanOrDefault("isThundering", !thundering));
             assertEquals(clearTimer, cd.getIntOrDefault("SetClear", -1));
             assertEquals(rainTimer, cd.getIntOrDefault("SetRaining", -1));
-            assertEquals(thunderTimer, cd.getIntOrDefault("SetThunder", -1));
+            assertEquals(thunderTimer, cd.getIntOrDefault("SetThundering", -1));
 
             // Mod -> PaperLab
             final CompoundData origCd = new CompoundData();
@@ -211,7 +297,7 @@ public class ServuxHudDifferentialTest {
             origCd.putBoolean("isThundering", thundering);
             origCd.putInt("SetClear", clearTimer);
             origCd.putInt("SetRaining", rainTimer);
-            origCd.putInt("SetThunder", thunderTimer);
+            origCd.putInt("SetThundering", thunderTimer);
 
             final ServuxHudPacket origPacket = ServuxHudPacket.WeatherTick(origCd);
             final FriendlyByteBuf origBuf = new FriendlyByteBuf(Unpooled.buffer());
@@ -226,7 +312,7 @@ public class ServuxHudDifferentialTest {
             assertEquals(thundering, decoded.getBooleanOr("isThundering", !thundering));
             assertEquals(clearTimer, decoded.getIntOr("SetClear", -1));
             assertEquals(rainTimer, decoded.getIntOr("SetRaining", -1));
-            assertEquals(thunderTimer, decoded.getIntOr("SetThunder", -1));
+            assertEquals(thunderTimer, decoded.getIntOr("SetThundering", -1));
         }
     }
 
