@@ -32,7 +32,12 @@ public final class MicroTimingLogger {
 
     public record MicroEvent(long gameTime, String dimension, int x, int y, int z,
                              DyeColor color, String blockName, String action, String details,
-                             int depth) {
+                             int depth, String phase, String stackTrace) {
+        public MicroEvent(long gameTime, String dimension, int x, int y, int z,
+                          DyeColor color, String blockName, String action, String details,
+                          int depth) {
+            this(gameTime, dimension, x, y, z, color, blockName, action, details, depth, null, null);
+        }
     }
 
     private static final Queue<MicroEvent> CURRENT_TICK_EVENTS = new ConcurrentLinkedQueue<>();
@@ -46,12 +51,21 @@ public final class MicroTimingLogger {
     }
 
     public static void recordEvent(final long gameTime, final String dim,
-                                                final int x, final int y, final int z,
-                                                final DyeColor color, final String blockName,
-                                                final String action, final String details,
-                                                final int depth) {
+                                   final int x, final int y, final int z,
+                                   final DyeColor color, final String blockName,
+                                   final String action, final String details,
+                                   final int depth) {
+        recordEvent(gameTime, dim, x, y, z, color, blockName, action, details, depth, null, null);
+    }
+
+    public static void recordEvent(final long gameTime, final String dim,
+                                   final int x, final int y, final int z,
+                                   final DyeColor color, final String blockName,
+                                   final String action, final String details,
+                                   final int depth, final String phase,
+                                   final String stackTrace) {
         if (!hasSubscribers()) return;
-        CURRENT_TICK_EVENTS.add(new MicroEvent(gameTime, dim, x, y, z, color, blockName, action, details, depth));
+        CURRENT_TICK_EVENTS.add(new MicroEvent(gameTime, dim, x, y, z, color, blockName, action, details, depth, phase, stackTrace));
     }
 
     public static void flushTick() {
@@ -147,6 +161,18 @@ public final class MicroTimingLogger {
                 .clickEvent(ClickEvent.suggestCommand(tpCmd)))
             .append(Component.text("[" + ev.blockName() + "] ", NamedTextColor.GRAY))
             .append(Component.text(ev.action() + " -> " + ev.details(), NamedTextColor.WHITE));
+
+        if (ev.phase() != null && !ev.phase().isEmpty()) {
+            line = line.append(Component.text("  @ ", NamedTextColor.DARK_GRAY))
+                .append(Component.text(ev.phase(), NamedTextColor.GOLD));
+        }
+
+        if (ev.stackTrace() != null && !ev.stackTrace().isEmpty()) {
+            final Component stHover = Component.text("Caller Stack Trace:\n", NamedTextColor.YELLOW)
+                .append(Component.text(ev.stackTrace(), NamedTextColor.WHITE));
+            line = line.append(Component.text("  $", NamedTextColor.YELLOW)
+                .hoverEvent(HoverEvent.showText(stHover)));
+        }
 
         if (mergedCount > 0) {
             line = line.append(Component.text(" +" + (mergedCount + 1) + "x", NamedTextColor.GRAY));

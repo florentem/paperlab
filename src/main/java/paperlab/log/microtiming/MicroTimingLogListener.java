@@ -39,8 +39,11 @@ public final class MicroTimingLogListener implements Listener {
                     final String dim = level.dimension().identifier().toString();
                     final String name = newState.getBlock().getName().getString();
                     final String diff = describeChange(oldState, newState);
+                    final int depth = io.papermc.paper.lab.microtiming.LabMicroTiming.currentDepth();
+                    final String phase = io.papermc.paper.lab.microtiming.LabMicroTiming.currentPhase().label();
+                    final String stack = captureStackTrace();
                     MicroTimingLogger.recordEvent(level.getGameTime(), dim, pos.getX(), pos.getY(), pos.getZ(),
-                        color, name, "state change", diff, 0);
+                        color, name, "state change", diff, depth, phase, stack);
                 }
 
                 @Override
@@ -51,8 +54,11 @@ public final class MicroTimingLogListener implements Listener {
                     final String dim = level.dimension().identifier().toString();
                     final String name = block.getName().getString();
                     final String action = type == 0 ? "push" : (type == 1 || type == 2 ? "retract" : "block event");
+                    final int depth = io.papermc.paper.lab.microtiming.LabMicroTiming.currentDepth();
+                    final String phase = io.papermc.paper.lab.microtiming.LabMicroTiming.currentPhase().label();
+                    final String stack = captureStackTrace();
                     MicroTimingLogger.recordEvent(level.getGameTime(), dim, pos.getX(), pos.getY(), pos.getZ(),
-                        color, name, action, "type=" + type + " data=" + data, 1);
+                        color, name, action, "type=" + type + " data=" + data, depth, phase, stack);
                 }
 
                 @Override
@@ -62,10 +68,31 @@ public final class MicroTimingLogListener implements Listener {
                     if (!MicroTimingLogger.hasSubscribers()) return;
                     final String dim = level.dimension().identifier().toString();
                     final String name = block.getName().getString();
+                    final int depth = io.papermc.paper.lab.microtiming.LabMicroTiming.currentDepth();
+                    final String phase = io.papermc.paper.lab.microtiming.LabMicroTiming.currentPhase().label();
+                    final String stack = captureStackTrace();
                     MicroTimingLogger.recordEvent(level.getGameTime(), dim, pos.getX(), pos.getY(), pos.getZ(),
-                        color, name, "scheduled tick", "executed", 0);
+                        color, name, "scheduled tick", "executed", depth, phase, stack);
                 }
             });
+        }
+
+        private static String captureStackTrace() {
+            final StackTraceElement[] st = Thread.currentThread().getStackTrace();
+            final StringBuilder sb = new StringBuilder();
+            int count = 0;
+            for (int i = 3; i < st.length && count < 8; i++) {
+                final String cls = st[i].getClassName();
+                if (cls.contains("paperlab") || cls.contains("LabMicroTiming") || cls.startsWith("java.lang")) {
+                    continue;
+                }
+                if (!sb.isEmpty()) sb.append("\n");
+                final String simpleName = cls.substring(cls.lastIndexOf('.') + 1);
+                sb.append(simpleName).append(".").append(st[i].getMethodName())
+                  .append(":").append(st[i].getLineNumber());
+                count++;
+            }
+            return sb.toString();
         }
 
         private static String describeChange(final net.minecraft.world.level.block.state.BlockState oldState,
@@ -83,7 +110,7 @@ public final class MicroTimingLogListener implements Listener {
         }
     }
 
-    /** Установка маркеров красителями: ПКМ красителем по блоку */
+    /** Установка маркеров красителями: циклическое переключение (REGULAR -> END_ROD -> REMOVE) */
     @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
     public void onPlayerInteract(final PlayerInteractEvent event) {
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK || event.getClickedBlock() == null) return;
@@ -98,10 +125,21 @@ public final class MicroTimingLogListener implements Listener {
         if (dye != null && CoreBridge.PRESENT) {
             final Block b = event.getClickedBlock();
             final net.minecraft.core.BlockPos pos = new net.minecraft.core.BlockPos(b.getX(), b.getY(), b.getZ());
-            io.papermc.paper.lab.microtiming.LabMicroTiming.setDyeMarker(pos, dye);
-            player.sendMessage(net.kyori.adventure.text.Component.text(
-                "Added MicroTiming marker: " + dye.getName() + " at " + b.getX() + " " + b.getY() + " " + b.getZ(),
-                net.kyori.adventure.text.format.NamedTextColor.GREEN));
+            final var cycle = io.papermc.paper.lab.microtiming.LabMicroTiming.cycleMarker(pos, dye);
+            final String coords = b.getX() + " " + b.getY() + " " + b.getZ();
+            final net.kyori.adventure.text.Component feedback = switch (cycle.resultType()) {
+                case ADDED -> net.kyori.adventure.text.Component.text("Added MicroTiming marker: ", net.kyori.adventure.text.format.NamedTextColor.GREEN)
+                    .append(net.kyori.adventure.text.Component.text(dye.getName() + " (REGULAR)", net.kyori.adventure.text.format.NamedTextColor.YELLOW))
+                    .append(net.kyori.adventure.text.Component.text(" at " + coords, net.kyori.adventure.text.format.NamedTextColor.GRAY));
+                case SWITCHED -> net.kyori.adventure.text.Component.text("Switched MicroTiming marker: ", net.kyori.adventure.text.format.NamedTextColor.AQUA)
+                    .append(net.kyori.adventure.text.Component.text(dye.getName() + " (END_ROD)", net.kyori.adventure.text.format.NamedTextColor.GOLD))
+                    .append(net.kyori.adventure.text.Component.text(" at " + coords, net.kyori.adventure.text.format.NamedTextColor.GRAY));
+                case REMOVED -> net.kyori.adventure.text.Component.text("Removed MicroTiming marker at " + coords, net.kyori.adventure.text.format.NamedTextColor.RED);
+                case COLOR_CHANGED -> net.kyori.adventure.text.Component.text("Changed MicroTiming marker color to ", net.kyori.adventure.text.format.NamedTextColor.GREEN)
+                    .append(net.kyori.adventure.text.Component.text(dye.getName() + " (REGULAR)", net.kyori.adventure.text.format.NamedTextColor.YELLOW))
+                    .append(net.kyori.adventure.text.Component.text(" at " + coords, net.kyori.adventure.text.format.NamedTextColor.GRAY));
+            };
+            player.sendMessage(feedback);
             event.setCancelled(true);
         }
     }
