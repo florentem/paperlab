@@ -86,6 +86,15 @@ public final class LabPermissions {
      */
     public static final String SERVUX_ENTITIES = "paperlab.servux.entities";
 
+    /**
+     * Право на просмотр NBT других игроков (инвентарь, эндер-сундук, здоровье).
+     * Без него запрос NBT чужого игрока через Servux отклоняется.
+     */
+    public static final String SERVUX_ENTITIES_PLAYERS = "paperlab.servux.entities.players";
+
+    /** Канал servux:tweaks: предпросмотр инвентарей мода Tweakeroo. */
+    public static final String SERVUX_TWEAKS = "paperlab.servux.tweaks";
+
     // --- вмешательство ---
     public static final String COUNTER_EDIT = "paperlab.counter.edit";
     public static final String GHOST = "paperlab.ghost";
@@ -133,6 +142,8 @@ public final class LabPermissions {
         NODES.put(SERVUX_STRUCTURES, "servux:structures channel for MiniHUD");
         NODES.put(SERVUX_LITEMATICS, "servux:litematics channel: server-side schematic paste");
         NODES.put(SERVUX_ENTITIES, "servux:entity_data channel: entity and block entity NBT");
+        NODES.put(SERVUX_ENTITIES_PLAYERS, "inspect other players' private inventory/NBT via Servux");
+        NODES.put(SERVUX_TWEAKS, "servux:tweaks channel: Tweakeroo inventory preview");
         NODES.put(COUNTER_EDIT, "reset counters and put hoppers under tracking");
         NODES.put(GHOST, "observer mode for yourself");
         NODES.put(GHOST_OTHER, "observer mode for another player or bot");

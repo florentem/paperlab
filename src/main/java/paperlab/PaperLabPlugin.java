@@ -74,6 +74,7 @@ public final class PaperLabPlugin extends JavaPlugin implements Listener {
         paperlab.servux.ServuxStructures.enable(this);
         paperlab.servux.ServuxLitematica.enable(this);
         paperlab.servux.ServuxEntities.enable(this);
+        paperlab.servux.ServuxTweaks.enable(this);
         paperlab.cplay.CPlayService.enable(this);
 
         // Один общий тик: счётчики каждый тик, HUD раз в секунду (решает сам LabHud).
@@ -97,6 +98,7 @@ public final class PaperLabPlugin extends JavaPlugin implements Listener {
         paperlab.servux.ServuxStructures.disable();
         paperlab.servux.ServuxLitematica.disable();
         paperlab.servux.ServuxEntities.disable();
+        paperlab.servux.ServuxTweaks.disable();
         paperlab.cplay.CPlayService.disable();
         LabGhost.restoreAll();
         // Правила меняют поведение мира: снимать их обязательно, иначе выключенный
@@ -127,6 +129,7 @@ public final class PaperLabPlugin extends JavaPlugin implements Listener {
         paperlab.servux.ServuxStructures.onQuit(event.getPlayer());
         paperlab.servux.ServuxLitematica.onQuit(event.getPlayer());
         paperlab.servux.ServuxEntities.onQuit(event.getPlayer());
+        paperlab.servux.ServuxTweaks.onQuit(event.getPlayer());
         paperlab.cplay.CPlayService.onQuit(event.getPlayer());
         LabGhost.onDisconnect(event.getPlayer());
     }

@@ -48,6 +48,7 @@ dependencies {
     testImplementation("ca.spottedleaf:leafpile:1.0.0")
     testImplementation("com.mojang:authlib:7.0.63")
     testImplementation("it.unimi.dsi:fastutil:8.5.15")
+    testImplementation("io.leangen.geantyref:geantyref:1.3.15")
 }
 
 java {

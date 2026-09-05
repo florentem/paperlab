@@ -64,6 +64,7 @@ public final class ServuxHud implements PluginMessageListener {
     private static final int S2C_METADATA = 1;
     private static final int C2S_METADATA_REQUEST = 2;
     private static final int S2C_SPAWN_DATA = 3;
+    private static final int S2C_WEATHER_TICK = 5;
     private static final int S2C_DATA_LOGGER_TICK = 7;
     private static final int C2S_SPAWN_DATA_REQUEST = 4;
     private static final int C2S_RECIPE_MANAGER_REQUEST = 6;
@@ -82,6 +83,9 @@ public final class ServuxHud implements PluginMessageListener {
 
     /** Как часто уходит тик логгеров. Столько же у Servux. */
     private static final int LOGGER_PERIOD_TICKS = 15;
+
+    /** Как часто уходит тик погоды (40 тиков = 2 секунды). */
+    private static final int WEATHER_PERIOD_TICKS = 40;
 
     /** Делитель площади в ванильной формуле глобального капа: 17 x 17 чанков. */
     private static final int SPAWN_AREA_CHUNKS = 17 * 17;
@@ -181,6 +185,7 @@ public final class ServuxHud implements PluginMessageListener {
         if (DEBUG) {
             plugin.getLogger().info("Servux hud: metadata → " + player.getName());
         }
+        sendWeather(player);
     }
 
     private void sendSpawnData(final Player player) throws IOException {
@@ -242,9 +247,17 @@ public final class ServuxHud implements PluginMessageListener {
         }
     }
 
-    /** Тик логгеров. Вызывается из общего тика плагина. */
+    /** Тик логгеров и погоды. Вызывается из общего тика плагина. */
     public static void tick() {
-        if (LOGGERS.isEmpty() || ++tickCounter % LOGGER_PERIOD_TICKS != 0) {
+        tickCounter++;
+        if (!REGISTERED.isEmpty() && tickCounter % WEATHER_PERIOD_TICKS == 0) {
+            for (final Player player : Bukkit.getOnlinePlayers()) {
+                if (REGISTERED.contains(player.getUniqueId())) {
+                    sendWeather(player);
+                }
+            }
+        }
+        if (LOGGERS.isEmpty() || tickCounter % LOGGER_PERIOD_TICKS != 0) {
             return;
         }
         for (final Player player : Bukkit.getOnlinePlayers()) {
@@ -267,6 +280,49 @@ public final class ServuxHud implements PluginMessageListener {
                 LOGGERS.remove(player.getUniqueId());
             }
         }
+    }
+
+    private static void sendWeather(final Player player) {
+        if (!REGISTERED.contains(player.getUniqueId())) {
+            return;
+        }
+        try {
+            send(player, ServuxWire.data(S2C_WEATHER_TICK, weatherData(player)));
+        } catch (final Throwable t) {
+            if (DEBUG) {
+                plugin.getLogger().warning("Servux hud: failed to send weather to "
+                    + player.getName() + ": " + t);
+            }
+        }
+    }
+
+    public static CompoundTag weatherData(final Player player) {
+        final org.bukkit.World world = player.getWorld();
+        final CompoundTag tag = new CompoundTag();
+        final boolean raining = world.hasStorm();
+        final int rainTime = world.getWeatherDuration();
+        final boolean thundering = world.isThundering();
+        final int thunderTime = world.getThunderDuration();
+        final int clearTime = world.getClearWeatherDuration();
+
+        if (raining && rainTime > -1) {
+            tag.putInt("SetRaining", rainTime);
+            tag.putBoolean("isRaining", true);
+        } else {
+            tag.putBoolean("isRaining", false);
+        }
+
+        if (thundering && thunderTime > -1) {
+            tag.putInt("SetThundering", thunderTime);
+            tag.putBoolean("isThundering", true);
+        } else {
+            tag.putBoolean("isThundering", false);
+        }
+
+        if (clearTime > -1) {
+            tag.putInt("SetClear", clearTime);
+        }
+        return tag;
     }
 
     private static CompoundTag tpsData() {

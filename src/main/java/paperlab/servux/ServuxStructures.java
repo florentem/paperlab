@@ -219,7 +219,7 @@ public final class ServuxStructures implements PluginMessageListener {
             return null;
         }
         final var key = level.registryAccess().lookupOrThrow(Registries.STRUCTURE).getKey(structure);
-        if (key == null) {
+        if (key == null || "minecraft:buried_treasure".equals(key.toString())) {
             return null;
         }
 

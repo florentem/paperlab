@@ -83,12 +83,14 @@
 `paperlab.log.microtiming`, `paperlab.log.movement` и т.д.) и у каждого правила
 (`paperlab.rule.<name>`) есть собственный пермишен. Полный список — `/carpet perms`.
 
-Отдельно стоит выделить четыре:
+Отдельно стоит выделить:
 
 | Право | Почему отдельное |
 |---|---|
 | `paperlab.servux.litematics` | единственное, которое **пишет в мир** — вставка схематик |
 | `paperlab.servux.entities` | чтение NBT чужих сундуков в радиусе 128 блоков |
+| `paperlab.servux.entities.players` | чтение приватного NBT других игроков (инвентарь, эндер-сундук) |
+| `paperlab.servux.tweaks` | предпросмотр инвентарей мода Tweakeroo на расстоянии |
 | `paperlab.servux.seed` | сид мира |
 | `paperlab.rule.setdefault` | закрепить правило между перезапусками |
 
@@ -103,8 +105,9 @@
 | Мод | Канал | Что даёт |
 |---|---|---|
 | **ChunkDebug** | `chunkdebug:*` | карта статусов чанков и тикетов, F6 |
-| **MiniHUD** | `servux:hud_metadata`, `servux:structures`, `servux:entity_data` | TPS, мобкапы, рамки структур, NBT под прицелом |
-| **Litematica** | `servux:litematics` | **вставка схематик сервером** — без тысяч строк `/setblock` в чате |
+| **MiniHUD** | `servux:hud_metadata`, `servux:structures`, `servux:entity_data` | TPS, погода (таймеры дождя/грозы/ясности), мобкапы, рамки структур (с фильтром кладов), NBT под прицелом |
+| **Tweakeroo** | `servux:tweaks` | **предпросмотр инвентарей** шалкеров, сундуков и мобов на расстоянии |
+| **Litematica** | `servux:litematics` | **вставка схематик сервером** — с коррекцией поворота рельсов, ступеней и двойных сундуков (автоуступка при LitematicaFolia) |
 | **Capture & Playback** | `minecraft:mod/g4mespeed` | **запись и воспроизведение сигналов**, таймлайн, совместные сессии |
 
 Для Litematica нужно включить в её настройках `entityDataSync` (по умолчанию выключен) —

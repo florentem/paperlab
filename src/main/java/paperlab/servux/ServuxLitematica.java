@@ -65,6 +65,10 @@ public final class ServuxLitematica implements PluginMessageListener {
 
     public static void enable(final Plugin owner) {
         plugin = owner;
+        if (Bukkit.getPluginManager().getPlugin("LitematicaFolia") != null) {
+            owner.getLogger().info("Servux litematics: LitematicaFolia detected, skipping internal servux:litematics handler to prevent conflicts.");
+            return;
+        }
         Bukkit.getMessenger().registerIncomingPluginChannel(owner, CHANNEL, new ServuxLitematica());
         Bukkit.getMessenger().registerOutgoingPluginChannel(owner, CHANNEL);
     }
