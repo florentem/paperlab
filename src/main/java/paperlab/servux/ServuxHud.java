@@ -240,6 +240,7 @@ public final class ServuxHud implements PluginMessageListener {
             LOGGERS.remove(player.getUniqueId());
         } else {
             LOGGERS.put(player.getUniqueId(), wanted);
+            sendLoggerData(player, wanted);
         }
         if (DEBUG) {
             plugin.getLogger().info("Servux hud: " + player.getName() + " loggers " + wanted);
@@ -264,20 +265,24 @@ public final class ServuxHud implements PluginMessageListener {
             if (wanted == null || wanted.isEmpty()) {
                 continue;
             }
-            try {
-                final CompoundTag tag = new CompoundTag();
-                if (wanted.contains(LOGGER_TPS)) {
-                    tag.put(LOGGER_TPS, tpsData());
-                }
-                if (wanted.contains(LOGGER_MOB_CAPS)) {
-                    tag.put(LOGGER_MOB_CAPS, mobCapData());
-                }
-                send(player, ServuxWire.data(S2C_DATA_LOGGER_TICK, tag));
-            } catch (final Throwable t) {
-                plugin.getLogger().warning("Servux hud: logger tick failed for "
-                    + player.getName() + ": " + t);
-                LOGGERS.remove(player.getUniqueId());
+            sendLoggerData(player, wanted);
+        }
+    }
+
+    private static void sendLoggerData(final Player player, final Set<String> wanted) {
+        try {
+            final CompoundTag tag = new CompoundTag();
+            if (wanted.contains(LOGGER_TPS)) {
+                tag.put(LOGGER_TPS, tpsData());
             }
+            if (wanted.contains(LOGGER_MOB_CAPS)) {
+                tag.put(LOGGER_MOB_CAPS, mobCapData());
+            }
+            send(player, ServuxWire.data(S2C_DATA_LOGGER_TICK, tag));
+        } catch (final Throwable t) {
+            plugin.getLogger().warning("Servux hud: logger send failed for "
+                + player.getName() + ": " + t);
+            LOGGERS.remove(player.getUniqueId());
         }
     }
 

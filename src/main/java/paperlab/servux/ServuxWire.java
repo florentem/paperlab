@@ -67,7 +67,19 @@ public final class ServuxWire {
     public static CompoundTag readCompressedNbt(final byte[] data) throws IOException {
         final int prefix = varIntLength(data);
 
-        // 1. Длина + GZIP.
+        // 1. Сетевой NBT сразу после типа (как шлёт MiniHUD / Litematica).
+        try {
+            final FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.wrappedBuffer(data));
+            buf.readVarInt();
+            final CompoundTag tag = buf.readNbt();
+            if (tag != null) {
+                return tag;
+            }
+        } catch (final Throwable ignored) {
+            // следующий вариант
+        }
+
+        // 2. Длина + GZIP.
         try {
             final FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.wrappedBuffer(data));
             buf.readVarInt();
@@ -82,7 +94,7 @@ public final class ServuxWire {
             // следующий вариант
         }
 
-        // 2. Длина + несжатый именованный NBT.
+        // 3. Длина + несжатый именованный NBT.
         try {
             final FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.wrappedBuffer(data));
             buf.readVarInt();
@@ -91,18 +103,6 @@ public final class ServuxWire {
                 final byte[] body = new byte[length];
                 buf.readBytes(body);
                 return NbtIo.read(new DataInputStream(new ByteArrayInputStream(body)));
-            }
-        } catch (final Throwable ignored) {
-            // следующий вариант
-        }
-
-        // 3. Сетевой NBT сразу после типа.
-        try {
-            final FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.wrappedBuffer(data));
-            buf.readVarInt();
-            final CompoundTag tag = buf.readNbt();
-            if (tag != null) {
-                return tag;
             }
         } catch (final Throwable ignored) {
             // не подошло ничего
@@ -229,13 +229,9 @@ public final class ServuxWire {
     }
 
     /**
-     * Дописать тело в кадре malilib: {@code varint(-1)} и следом сетевой NBT.
-     *
-     * <p>Минус единица — то, что malilib пишет вместо длины. Установлено по дампу
-     * настоящего пакета Litematica: {@code ff ff ff ff 0f | 0a | ...}.
+     * Дописать сетевой NBT в буфер.
      */
     public static void appendNbtBody(final FriendlyByteBuf buf, final CompoundTag tag) {
-        buf.writeVarInt(-1);
         buf.writeNbt(tag);
     }
 
@@ -248,22 +244,14 @@ public final class ServuxWire {
     }
 
     /**
-     * Собрать data-кадр Servux: varint(type) + int(длина) + GZIP-поток именованного NBT (корень "").
+     * Собрать data-кадр Servux: varint(type) + сетевой NBT.
      *
-     * <p>Именно этого формата ожидает MiniHUD в {@code ServuxHudPacket.fromPacket}
-     * для типов {@code S2C_SPAWN_DATA} (3), {@code S2C_WEATHER_TICK} (5) и
-     * {@code S2C_DATA_LOGGER_TICK} (7) через {@code DataByteBufUtils.fromByteBuf}.
+     * <p>Клиент MiniHUD читает все типы пакетов (SPAWN_DATA, WEATHER_TICK, DATA_LOGGER_TICK)
+     * через {@code FriendlyByteBuf.readNbt()}. Любые префиксы длины или GZIP оставляют
+     * непрочитанные байты в Netty-буфере и приводят к кику клиента с DecoderException.
      */
-    public static byte[] data(final int type, final CompoundTag tag) throws IOException {
-        final java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
-        NbtIo.writeCompressed(tag, baos);
-        final byte[] compressed = baos.toByteArray();
-
-        final FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
-        buf.writeVarInt(type);
-        buf.writeInt(compressed.length);
-        buf.writeBytes(compressed);
-        return drain(buf);
+    public static byte[] data(final int type, final CompoundTag tag) {
+        return metadata(type, tag);
     }
 
     private static byte[] drain(final FriendlyByteBuf buf) {
