@@ -101,7 +101,7 @@ public final class CPlaySessionManager {
 
     private void sendTo(final Player player, final byte[] data) {
         if (player.isOnline()) {
-            player.sendPluginMessage(paperlab.PaperLabPlugin.get(), paperlab.cplay.protocol.CPlayProtocol.CHANNEL, data);
+            paperlab.cplay.CPlayService.send(player, data);
         }
     }
 

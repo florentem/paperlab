@@ -8,6 +8,10 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.messaging.PluginMessageListener;
+import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
+import net.minecraft.network.protocol.common.custom.DiscardedPayload;
+import net.minecraft.resources.Identifier;
+import org.bukkit.craftbukkit.entity.CraftPlayer;
 import paperlab.cplay.model.CPlayAssetInfo;
 import paperlab.cplay.model.CPlayAssetType;
 import paperlab.cplay.playback.CPlayPlaybackController;
@@ -67,22 +71,32 @@ public final class CPlayService implements PluginMessageListener {
     public CPlaySessionManager getSessionManager() { return sessionManager; }
     public CPlayPlaybackController getPlaybackController() { return playbackController; }
 
+    public static void send(final Player player, final byte[] body) {
+        if (!player.isOnline()) {
+            return;
+        }
+        final var connection = ((CraftPlayer) player).getHandle().connection;
+        if (connection != null) {
+            connection.send(new ClientboundCustomPayloadPacket(
+                new DiscardedPayload(Identifier.parse(CPlayProtocol.CHANNEL), body)));
+        }
+    }
+
     public static void onJoin(final Player player) {
         if (instance == null) return;
 
         Bukkit.getGlobalRegionScheduler().runDelayed(instance.plugin, task -> {
-            if (!player.isOnline() || !player.hasPermission("paperlab.cplay")) {
+            if (!player.isOnline()) {
                 return;
             }
 
-            // 1. Отправляем рукопожатие соединений G4mespeed
-            player.sendPluginMessage(instance.plugin, CPlayProtocol.CHANNEL, CPlayWire.encodeConnectionPacket());
+            // 1. Отправляем рукопожатие соединений G4mespeed в обход sendPluginMessage,
+            //    чтобы клиентский мод сразу распознал наличие сервера CPlay.
+            send(player, CPlayWire.encodeConnectionPacket());
 
             // 2. Отправляем историю ассетов и кэш игроков
-            player.sendPluginMessage(instance.plugin, CPlayProtocol.CHANNEL,
-                CPlayWire.encodeAssetHistory(instance.assetStore.getAllAssets()));
-            player.sendPluginMessage(instance.plugin, CPlayProtocol.CHANNEL,
-                CPlayWire.encodePlayerCache(instance.assetStore.getPlayerCache().getAll()));
+            send(player, CPlayWire.encodeAssetHistory(instance.assetStore.getAllAssets()));
+            send(player, CPlayWire.encodePlayerCache(instance.assetStore.getPlayerCache().getAll()));
 
             // 3. Регистрируем игрока в кэше и объявляем остальным
             instance.assetStore.getPlayerCache().put(player.getUniqueId(), player.getName());
@@ -99,8 +113,8 @@ public final class CPlayService implements PluginMessageListener {
     public static void broadcast(final byte[] packet, final Player exclude) {
         if (instance == null) return;
         for (final Player p : Bukkit.getOnlinePlayers()) {
-            if (!p.equals(exclude) && p.hasPermission("paperlab.cplay")) {
-                p.sendPluginMessage(instance.plugin, CPlayProtocol.CHANNEL, packet);
+            if (!p.equals(exclude)) {
+                send(p, packet);
             }
         }
     }
@@ -120,10 +134,8 @@ public final class CPlayService implements PluginMessageListener {
             if (extensionUID == CPlayProtocol.CORE_UID) {
                 if (subId == CPlayProtocol.PACKET_CORE_CONNECTION) {
                     // Клиент ответил своим ConnectionPacket
-                    player.sendPluginMessage(plugin, CPlayProtocol.CHANNEL,
-                        CPlayWire.encodeAssetHistory(assetStore.getAllAssets()));
-                    player.sendPluginMessage(plugin, CPlayProtocol.CHANNEL,
-                        CPlayWire.encodePlayerCache(assetStore.getPlayerCache().getAll()));
+                    send(player, CPlayWire.encodeAssetHistory(assetStore.getAllAssets()));
+                    send(player, CPlayWire.encodePlayerCache(assetStore.getPlayerCache().getAll()));
                 }
             } else if (extensionUID == CPlayProtocol.CAPL_UID) {
                 handleCaplPacket(subId, player, buf);
@@ -152,13 +164,11 @@ public final class CPlayService implements PluginMessageListener {
                 if (info != null && (info.hasPermission(player) || player.hasPermission("paperlab.cplay.admin"))) {
                     final byte[] data = assetStore.getAssetData(assetUUID);
                     if (data != null) {
-                        player.sendPluginMessage(plugin, CPlayProtocol.CHANNEL,
-                            CPlayWire.encodeAssetRequestResponseSuccess(data));
+                        send(player, CPlayWire.encodeAssetRequestResponseSuccess(data));
                         return;
                     }
                 }
-                player.sendPluginMessage(plugin, CPlayProtocol.CHANNEL,
-                    CPlayWire.encodeAssetRequestResponseDenied(assetUUID));
+                send(player, CPlayWire.encodeAssetRequestResponseDenied(assetUUID));
             }
             case CPlayProtocol.PACKET_CAPL_CREATE_ASSET -> {
                 final int typeIndex = buf.readByte() & 0xFF;
