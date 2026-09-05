@@ -7,6 +7,7 @@ import fi.dy.masa.servux.util.data.tag.util.DataByteBufUtils;
 import fi.dy.masa.servux.util.data.tag.converter.DataConverterNbt;
 import io.netty.buffer.Unpooled;
 import java.io.IOException;
+import java.util.Random;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.network.FriendlyByteBuf;
@@ -167,5 +168,210 @@ public class ServuxHudDifferentialTest {
         assertEquals(100, compound.getIntOrDefault("spawnPosX", 0));
         assertEquals(64, compound.getIntOrDefault("spawnPosY", 0));
         assertEquals(-200, compound.getIntOrDefault("spawnPosZ", 0));
+    }
+
+    // --- 5. Дифференциальный фаззинг Weather (10 000 итераций) ---
+    @Test
+    @DisplayName("Дифференциальный фаззинг Weather: PaperLab vs Mod в обе стороны [10 000 итераций]")
+    public void fuzzWeatherDifferential() throws IOException {
+        final Random rng = new Random(1337L);
+        for (int i = 0; i < 10_000; i++) {
+            final boolean raining = rng.nextBoolean();
+            final boolean thundering = rng.nextBoolean();
+            final int clearTimer = rng.nextInt(2_000_000);
+            final int rainTimer = rng.nextInt(2_000_000);
+            final int thunderTimer = rng.nextInt(2_000_000);
+
+            // PaperLab -> Mod
+            final CompoundTag weatherTag = new CompoundTag();
+            weatherTag.putBoolean("isRaining", raining);
+            weatherTag.putBoolean("isThundering", thundering);
+            weatherTag.putInt("SetClear", clearTimer);
+            weatherTag.putInt("SetRaining", rainTimer);
+            weatherTag.putInt("SetThunder", thunderTimer);
+
+            final byte[] wire = ServuxWire.data(S2C_WEATHER_TICK, weatherTag);
+            final FriendlyByteBuf inBuf = new FriendlyByteBuf(Unpooled.wrappedBuffer(wire));
+            final ServuxHudPacket parsed = ServuxHudPacket.fromPacket(inBuf);
+
+            assertNotNull(parsed);
+            assertEquals(ServuxHudPacket.Type.PACKET_S2C_WEATHER_TICK, parsed.getType());
+            assertFalse(inBuf.isReadable());
+
+            final CompoundData cd = parsed.getCompound();
+            assertEquals(raining, cd.getBooleanOrDefault("isRaining", !raining));
+            assertEquals(thundering, cd.getBooleanOrDefault("isThundering", !thundering));
+            assertEquals(clearTimer, cd.getIntOrDefault("SetClear", -1));
+            assertEquals(rainTimer, cd.getIntOrDefault("SetRaining", -1));
+            assertEquals(thunderTimer, cd.getIntOrDefault("SetThunder", -1));
+
+            // Mod -> PaperLab
+            final CompoundData origCd = new CompoundData();
+            origCd.putBoolean("isRaining", raining);
+            origCd.putBoolean("isThundering", thundering);
+            origCd.putInt("SetClear", clearTimer);
+            origCd.putInt("SetRaining", rainTimer);
+            origCd.putInt("SetThunder", thunderTimer);
+
+            final ServuxHudPacket origPacket = ServuxHudPacket.WeatherTick(origCd);
+            final FriendlyByteBuf origBuf = new FriendlyByteBuf(Unpooled.buffer());
+            origPacket.toPacket(origBuf);
+            final byte[] origBytes = new byte[origBuf.readableBytes()];
+            origBuf.readBytes(origBytes);
+            origBuf.release();
+
+            assertEquals(S2C_WEATHER_TICK, ServuxWire.readType(origBytes));
+            final CompoundTag decoded = ServuxWire.readCompressedNbt(origBytes);
+            assertEquals(raining, decoded.getBooleanOr("isRaining", !raining));
+            assertEquals(thundering, decoded.getBooleanOr("isThundering", !thundering));
+            assertEquals(clearTimer, decoded.getIntOr("SetClear", -1));
+            assertEquals(rainTimer, decoded.getIntOr("SetRaining", -1));
+            assertEquals(thunderTimer, decoded.getIntOr("SetThunder", -1));
+        }
+    }
+
+    // --- 6. Дифференциальный фаззинг MobCaps и TPS (5 000 итераций) ---
+    @Test
+    @DisplayName("Дифференциальный фаззинг MobCaps и TPS [5 000 итераций]")
+    public void fuzzMobCapsDifferential() throws IOException {
+        final Random rng = new Random(4242L);
+        final String[] dims = {"minecraft:overworld", "minecraft:the_nether", "minecraft:the_end", "custom:space"};
+
+        for (int i = 0; i < 5_000; i++) {
+            final CompoundTag dataLogger = new CompoundTag();
+
+            final CompoundTag tps = new CompoundTag();
+            final double mspt = rng.nextDouble() * 100.0;
+            final double tpsVal = Math.min(20.0, rng.nextDouble() * 25.0);
+            tps.putDouble("mspt", mspt);
+            tps.putDouble("tps", tpsVal);
+            tps.putLong("sprintTicks", (long) rng.nextInt(1000));
+            tps.putBoolean("frozen", rng.nextBoolean());
+            tps.putBoolean("sprinting", rng.nextBoolean());
+            tps.putBoolean("stepping", rng.nextBoolean());
+            dataLogger.put("tps", tps);
+
+            final CompoundTag mobCaps = new CompoundTag();
+            final String selectedDim = dims[rng.nextInt(dims.length)];
+            final CompoundTag dimEntry = new CompoundTag();
+            final long worldTick = (long) rng.nextInt(10_000_000);
+            dimEntry.putLong("WorldTick", worldTick);
+            dimEntry.putInt("cap_count", MobCategory.values().length);
+
+            final ListTag capsList = new ListTag();
+            final int[] currents = new int[MobCategory.values().length];
+            final int[] caps = new int[MobCategory.values().length];
+            for (int c = 0; c < MobCategory.values().length; c++) {
+                currents[c] = rng.nextInt(500);
+                caps[c] = rng.nextInt(500);
+                final CompoundTag catTag = new CompoundTag();
+                catTag.putInt("current", currents[c]);
+                catTag.putInt("cap", caps[c]);
+                capsList.add(catTag);
+            }
+            dimEntry.put("cap_data", capsList);
+            mobCaps.put(selectedDim, dimEntry);
+            dataLogger.put("mob_caps", mobCaps);
+
+            final byte[] wire = ServuxWire.data(S2C_DATA_LOGGER_TICK, dataLogger);
+            final FriendlyByteBuf inBuf = new FriendlyByteBuf(Unpooled.wrappedBuffer(wire));
+            final ServuxHudPacket parsed = ServuxHudPacket.fromPacket(inBuf);
+
+            assertNotNull(parsed);
+            assertEquals(ServuxHudPacket.Type.PACKET_S2C_DATA_LOGGER_TICK, parsed.getType());
+            assertFalse(inBuf.isReadable());
+
+            final CompoundData cd = parsed.getCompound();
+            final CompoundData tpsCd = cd.getCompoundOrDefault("tps", new CompoundData());
+            assertEquals(mspt, tpsCd.getDoubleOrDefault("mspt", 0.0), 0.001);
+            assertEquals(tpsVal, tpsCd.getDoubleOrDefault("tps", 0.0), 0.001);
+
+            final CompoundData mobCapsCd = cd.getCompoundOrDefault("mob_caps", new CompoundData());
+            final CompoundData dimCd = mobCapsCd.getCompoundOrDefault(selectedDim, new CompoundData());
+            assertEquals(worldTick, dimCd.getLongOrDefault("WorldTick", -1L));
+            assertEquals(MobCategory.values().length, dimCd.getIntOrDefault("cap_count", 0));
+        }
+    }
+
+    // --- 7. Дифференциальный фаззинг Spawn Data (5 000 итераций) ---
+    @Test
+    @DisplayName("Дифференциальный фаззинг Spawn Data [5 000 итераций]")
+    public void fuzzSpawnDataDifferential() throws IOException {
+        final Random rng = new Random(9999L);
+        final String[] dims = {"minecraft:overworld", "minecraft:the_nether", "minecraft:the_end", "dim:void"};
+
+        for (int i = 0; i < 5_000; i++) {
+            final String dim = dims[rng.nextInt(dims.length)];
+            final int x = rng.nextInt();
+            final int y = rng.nextInt(512) - 64;
+            final int z = rng.nextInt();
+
+            final CompoundTag spawnTag = new CompoundTag();
+            spawnTag.putString("spawnDimension", dim);
+            spawnTag.putInt("spawnPosX", x);
+            spawnTag.putInt("spawnPosY", y);
+            spawnTag.putInt("spawnPosZ", z);
+
+            final byte[] wire = ServuxWire.data(S2C_SPAWN_DATA, spawnTag);
+            final FriendlyByteBuf inBuf = new FriendlyByteBuf(Unpooled.wrappedBuffer(wire));
+            final ServuxHudPacket parsed = ServuxHudPacket.fromPacket(inBuf);
+
+            assertNotNull(parsed);
+            assertEquals(ServuxHudPacket.Type.PACKET_S2C_SPAWN_DATA, parsed.getType());
+            assertFalse(inBuf.isReadable());
+
+            final CompoundData cd = parsed.getCompound();
+            assertEquals(dim, cd.getStringOrDefault("spawnDimension", ""));
+            assertEquals(x, cd.getIntOrDefault("spawnPosX", 0));
+            assertEquals(y, cd.getIntOrDefault("spawnPosY", 0));
+            assertEquals(z, cd.getIntOrDefault("spawnPosZ", 0));
+        }
+    }
+
+    // --- 8. Мутационный фаззинг сетевого потока (10 000 итераций) ---
+    @Test
+    @DisplayName("Мутационный фаззинг сетевого потока: устойчивость к повреждённым байтам и неполным пакетам [10 000 итераций]")
+    public void fuzzMutationalRobustness() throws IOException {
+        final Random rng = new Random(777L);
+        final CompoundTag validTag = new CompoundTag();
+        validTag.putBoolean("isRaining", true);
+        validTag.putInt("SetRaining", 1234);
+
+        final byte[] validBytes = ServuxWire.data(S2C_WEATHER_TICK, validTag);
+
+        for (int i = 0; i < 10_000; i++) {
+            final int mutationType = rng.nextInt(3);
+            final byte[] mutated;
+
+            if (mutationType == 0) {
+                // Обрезаем пакет
+                final int cut = rng.nextInt(validBytes.length);
+                mutated = new byte[cut];
+                System.arraycopy(validBytes, 0, mutated, 0, cut);
+            } else if (mutationType == 1) {
+                // Повреждаем случайные байты в сжатом GZIP потоке
+                mutated = validBytes.clone();
+                final int flips = 1 + rng.nextInt(5);
+                for (int f = 0; f < flips; f++) {
+                    mutated[rng.nextInt(mutated.length)] = (byte) rng.nextInt(256);
+                }
+            } else {
+                // Полностью случайный мусор произвольной длины
+                final int noiseLen = rng.nextInt(128);
+                mutated = new byte[noiseLen];
+                rng.nextBytes(mutated);
+            }
+
+            final FriendlyByteBuf inBuf = new FriendlyByteBuf(Unpooled.wrappedBuffer(mutated));
+            try {
+                // Вызываем оригинальный парсер Servux/MiniHUD:
+                // Он должен либо успешно распарсить, либо безопасно вернуть null / выбросить исключение (без зависания или OOM)
+                ServuxHudPacket.fromPacket(inBuf);
+            } catch (final Exception expectedSafeFailure) {
+                // Безопасное отклонение повреждённого пакета
+            } finally {
+                inBuf.release();
+            }
+        }
     }
 }
