@@ -141,14 +141,17 @@ public final class CPlayService implements PluginMessageListener {
             }
             case CPlayProtocol.PACKET_CAPL_REQUEST_ASSET -> {
                 final UUID assetUUID = CPlayWire.readUUID(buf);
-                final byte[] data = assetStore.getAssetData(assetUUID);
-                if (data != null) {
-                    player.sendPluginMessage(plugin, CPlayProtocol.CHANNEL,
-                        CPlayWire.encodeAssetRequestResponseSuccess(data));
-                } else {
-                    player.sendPluginMessage(plugin, CPlayProtocol.CHANNEL,
-                        CPlayWire.encodeAssetRequestResponseDenied(assetUUID));
+                final CPlayAssetInfo info = assetStore.getAsset(assetUUID);
+                if (info != null && (info.hasPermission(player) || player.hasPermission("paperlab.cplay.admin"))) {
+                    final byte[] data = assetStore.getAssetData(assetUUID);
+                    if (data != null) {
+                        player.sendPluginMessage(plugin, CPlayProtocol.CHANNEL,
+                            CPlayWire.encodeAssetRequestResponseSuccess(data));
+                        return;
+                    }
                 }
+                player.sendPluginMessage(plugin, CPlayProtocol.CHANNEL,
+                    CPlayWire.encodeAssetRequestResponseDenied(assetUUID));
             }
             case CPlayProtocol.PACKET_CAPL_CREATE_ASSET -> {
                 final int typeIndex = buf.readByte() & 0xFF;

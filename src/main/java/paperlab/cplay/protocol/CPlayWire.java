@@ -60,6 +60,12 @@ public final class CPlayWire {
 
     public static String readString(final ByteBuf buf) {
         final int len = readVarInt(buf);
+        if (len < 0 || len > 32767) {
+            throw new IllegalArgumentException("String length " + len + " out of bounds (0-32767)");
+        }
+        if (buf.readableBytes() < len) {
+            throw new IllegalArgumentException("Buffer underflow reading string of length " + len + ", readable: " + buf.readableBytes());
+        }
         final byte[] bytes = new byte[len];
         buf.readBytes(bytes);
         return new String(bytes, StandardCharsets.UTF_8);
@@ -200,6 +206,9 @@ public final class CPlayWire {
 
         final CPlayAssetInfo info = new CPlayAssetInfo(typeIndex, assetUUID, handle, name, created, modified, createdBy, owner);
         int collabCount = buf.readInt();
+        if (collabCount < 0 || collabCount > 10000 || buf.readableBytes() < collabCount * 16) {
+            throw new IllegalArgumentException("Invalid collaborator count: " + collabCount);
+        }
         while (collabCount-- > 0) {
             info.addCollaborator(readUUID(buf));
         }

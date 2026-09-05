@@ -97,6 +97,10 @@ public final class LabGhost {
         }
         if (FALLBACK.remove(player.getUniqueId())) {
             player.setAffectsSpawning(true);
+            player.setInvisible(false);
+            if (player.getWorld() != null) {
+                player.setSimulationDistance(player.getWorld().getSimulationDistance());
+            }
         }
     }
 

@@ -180,6 +180,9 @@ public final class LitematicaPaste {
             final double x = pos.x + offX;
             final double y = pos.y + offY;
             final double z = pos.z + offZ;
+            if (!level.hasChunk((int) Math.floor(x) >> 4, (int) Math.floor(z) >> 4)) {
+                continue;
+            }
 
             try {
                 final net.minecraft.world.entity.Entity entity =
@@ -263,6 +266,10 @@ public final class LitematicaPaste {
         final int sizeX = Math.abs(regionSize.getX());
         final int sizeY = Math.abs(regionSize.getY());
         final int sizeZ = Math.abs(regionSize.getZ());
+        final long volume = (long) sizeX * sizeY * sizeZ;
+        if (volume <= 0L || volume > 20_000_000L) {
+            return new Result(0, 0, 0, 0);
+        }
         final int bits = Math.max(2, Integer.SIZE - Integer.numberOfLeadingZeros(palette.length - 1));
         final long mask = (1L << bits) - 1L;
 
@@ -311,7 +318,7 @@ public final class LitematicaPaste {
                     target = transform(target, subMirror, subRotation);
                     target = target.offset(regionPosTransformed).offset(origin);
 
-                    if (level.isOutsideBuildHeight(target)) {
+                    if (level.isOutsideBuildHeight(target) || !level.hasChunk(target.getX() >> 4, target.getZ() >> 4)) {
                         skipped++;
                         continue;
                     }

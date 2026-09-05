@@ -112,6 +112,14 @@ public final class CPlayCommands {
         return 1;
     }
 
+    private static ServerLevel resolveLevel(final CommandSourceStack source) {
+        final org.bukkit.Location loc = source.getLocation();
+        final org.bukkit.World bWorld = (loc != null && loc.getWorld() != null)
+            ? loc.getWorld()
+            : (org.bukkit.Bukkit.getWorlds().isEmpty() ? null : org.bukkit.Bukkit.getWorlds().get(0));
+        return (bWorld instanceof CraftWorld cw) ? cw.getHandle() : null;
+    }
+
     private static int startPlayback(final CommandContext<CommandSourceStack> ctx, final String key, final int delay, final int count) {
         final var sender = ctx.getSource().getSender();
         final CPlayService s = CPlayService.get();
@@ -130,8 +138,11 @@ public final class CPlayCommands {
             return 0;
         }
 
-        final org.bukkit.World bWorld = ctx.getSource().getLocation().getWorld();
-        final ServerLevel level = ((CraftWorld) bWorld).getHandle();
+        final ServerLevel level = resolveLevel(ctx.getSource());
+        if (level == null) {
+            sender.sendMessage(Component.text("No world available.", NamedTextColor.RED));
+            return 0;
+        }
 
         final Player player = (sender instanceof Player p) ? p : null;
         final boolean started = s.getPlaybackController().startPlayback(level, info, delay, count, player);
@@ -160,8 +171,11 @@ public final class CPlayCommands {
             return 0;
         }
 
-        final org.bukkit.World bWorld = ctx.getSource().getLocation().getWorld();
-        final ServerLevel level = ((CraftWorld) bWorld).getHandle();
+        final ServerLevel level = resolveLevel(ctx.getSource());
+        if (level == null) {
+            sender.sendMessage(Component.text("No world available.", NamedTextColor.RED));
+            return 0;
+        }
 
         final boolean stopped = s.getPlaybackController().stopPlayback(level, info.getAssetUUID());
         if (stopped) {
@@ -178,8 +192,11 @@ public final class CPlayCommands {
         final CPlayService s = CPlayService.get();
         if (s == null) return 0;
 
-        final org.bukkit.World bWorld = ctx.getSource().getLocation().getWorld();
-        final ServerLevel level = ((CraftWorld) bWorld).getHandle();
+        final ServerLevel level = resolveLevel(ctx.getSource());
+        if (level == null) {
+            sender.sendMessage(Component.text("No world available.", NamedTextColor.RED));
+            return 0;
+        }
         s.getPlaybackController().stopAllPlaybacks(level);
         sender.sendMessage(Component.text("All playbacks stopped.", NamedTextColor.YELLOW));
         return 1;
@@ -187,8 +204,11 @@ public final class CPlayCommands {
 
     private static int listPlaybacks(final CommandContext<CommandSourceStack> ctx) {
         final var sender = ctx.getSource().getSender();
-        final org.bukkit.World bWorld = ctx.getSource().getLocation().getWorld();
-        final ServerLevel level = ((CraftWorld) bWorld).getHandle();
+        final ServerLevel level = resolveLevel(ctx.getSource());
+        if (level == null) {
+            sender.sendMessage(Component.text("No world available.", NamedTextColor.RED));
+            return 0;
+        }
         final int active = CPlayBridge.getPlaybackStreams(level).size();
         sender.sendMessage(Component.text("Active playbacks in world: " + active, NamedTextColor.GOLD));
         return 1;
@@ -200,8 +220,11 @@ public final class CPlayCommands {
         final CPlayService s = CPlayService.get();
         if (s == null) return 0;
 
-        final org.bukkit.World bWorld = ctx.getSource().getLocation().getWorld();
-        final ServerLevel level = ((CraftWorld) bWorld).getHandle();
+        final ServerLevel level = resolveLevel(ctx.getSource());
+        if (level == null) {
+            sender.sendMessage(Component.text("No world available.", NamedTextColor.RED));
+            return 0;
+        }
 
         final io.papermc.paper.math.BlockPosition bp1 = fromRes.resolve(ctx.getSource());
         final io.papermc.paper.math.BlockPosition bp2 = toRes.resolve(ctx.getSource());
@@ -235,8 +258,11 @@ public final class CPlayCommands {
             return 0;
         }
 
-        final org.bukkit.World bWorld = ctx.getSource().getLocation().getWorld();
-        final ServerLevel level = ((CraftWorld) bWorld).getHandle();
+        final ServerLevel level = resolveLevel(ctx.getSource());
+        if (level == null) {
+            sender.sendMessage(Component.text("No world available.", NamedTextColor.RED));
+            return 0;
+        }
 
         final boolean stopped = s.getPlaybackController().stopCapture(level, info.getAssetUUID());
         if (stopped) {
@@ -250,8 +276,11 @@ public final class CPlayCommands {
 
     private static int listCaptures(final CommandContext<CommandSourceStack> ctx) {
         final var sender = ctx.getSource().getSender();
-        final org.bukkit.World bWorld = ctx.getSource().getLocation().getWorld();
-        final ServerLevel level = ((CraftWorld) bWorld).getHandle();
+        final ServerLevel level = resolveLevel(ctx.getSource());
+        if (level == null) {
+            sender.sendMessage(Component.text("No world available.", NamedTextColor.RED));
+            return 0;
+        }
         final int active = CPlayBridge.getCaptureStreams(level).size();
         sender.sendMessage(Component.text("Active captures in world: " + active, NamedTextColor.GOLD));
         return 1;

@@ -122,12 +122,22 @@ public final class CPlayAssetStore {
         return null;
     }
 
+    private static void atomicWrite(final File targetFile, final byte[] data) throws IOException {
+        final File tempFile = new File(targetFile.getParentFile(), targetFile.getName() + ".tmp." + UUID.randomUUID());
+        Files.write(tempFile.toPath(), data);
+        try {
+            Files.move(tempFile.toPath(), targetFile.toPath(), java.nio.file.StandardCopyOption.ATOMIC_MOVE, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (final java.nio.file.AtomicMoveNotSupportedException e) {
+            Files.move(tempFile.toPath(), targetFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
     public void saveAssetData(final UUID assetUUID, final byte[] data) {
         final CPlayAssetInfo info = getAsset(assetUUID);
         if (info == null) return;
         final File file = new File(assetsDir, assetUUID.toString() + info.getType().getExtension());
         try {
-            Files.write(file.toPath(), data);
+            atomicWrite(file, data);
             info.setLastModifiedTimestamp(System.currentTimeMillis());
             saveHistory();
         } catch (final IOException e) {
@@ -143,7 +153,7 @@ public final class CPlayAssetStore {
             buf.readLong(); // пропускаем packetId
             final byte[] raw = new byte[buf.readableBytes()];
             buf.readBytes(raw);
-            Files.write(historyFile.toPath(), raw);
+            atomicWrite(historyFile, raw);
         } catch (final Exception e) {
             logger.warning("Failed to save history.dat: " + e.getMessage());
         }
@@ -153,9 +163,14 @@ public final class CPlayAssetStore {
         if (!historyFile.exists()) return;
         try {
             final byte[] bytes = Files.readAllBytes(historyFile.toPath());
+            if (bytes.length < 5) return;
             final ByteBuf buf = Unpooled.wrappedBuffer(bytes);
             buf.readByte(); // fileVersion
             final int count = buf.readInt();
+            if (count < 0 || count > 100000) {
+                logger.warning("Invalid asset count in history.dat: " + count);
+                return;
+            }
             for (int i = 0; i < count; i++) {
                 final CPlayAssetInfo info = CPlayWire.readAssetInfo(buf);
                 registerAsset(info);
@@ -173,7 +188,7 @@ public final class CPlayAssetStore {
             buf.readLong(); // пропускаем packetId
             final byte[] raw = new byte[buf.readableBytes()];
             buf.readBytes(raw);
-            Files.write(playersFile.toPath(), raw);
+            atomicWrite(playersFile, raw);
         } catch (final Exception e) {
             logger.warning("Failed to save players.dat: " + e.getMessage());
         }
@@ -183,8 +198,13 @@ public final class CPlayAssetStore {
         if (!playersFile.exists()) return;
         try {
             final byte[] bytes = Files.readAllBytes(playersFile.toPath());
+            if (bytes.length < 4) return;
             final ByteBuf buf = Unpooled.wrappedBuffer(bytes);
             final int count = buf.readInt();
+            if (count < 0 || count > 100000) {
+                logger.warning("Invalid player count in players.dat: " + count);
+                return;
+            }
             for (int i = 0; i < count; i++) {
                 final UUID uuid = CPlayWire.readUUID(buf);
                 final String name = CPlayWire.readString(buf);

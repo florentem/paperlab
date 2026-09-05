@@ -31,8 +31,8 @@ public final class CPlaySessionManager {
 
         if (requestType == 0) { // REQUEST_START
             final SessionState state = sessions.computeIfAbsent(assetUUID, k -> new SessionState(assetUUID, info.getTypeIndex(), info.getAssetName()));
-            state.addParticipant(player);
-            playerSessions.computeIfAbsent(player.getUniqueId(), k -> new HashSet<>()).add(assetUUID);
+            state.addParticipant(player.getUniqueId());
+            playerSessions.computeIfAbsent(player.getUniqueId(), k -> ConcurrentHashMap.newKeySet()).add(assetUUID);
 
             final boolean isOwner = player.getUniqueId().equals(info.getOwnerUUID());
             final byte[] startPacket = CPlayWire.encodeSessionStart(assetUUID, info.getTypeIndex(), info.getAssetName(), isOwner, player.getUniqueId());
@@ -57,9 +57,12 @@ public final class CPlaySessionManager {
             state.addDelta(rawDeltas);
             final byte[] packet = CPlayWire.encodeSessionDeltas(assetUUID, rawDeltas);
 
-            for (final Player p : state.getParticipants()) {
-                if (!p.equals(sender) && p.isOnline()) {
-                    sendTo(p, packet);
+            for (final UUID pId : state.getParticipants()) {
+                if (!pId.equals(sender.getUniqueId())) {
+                    final Player p = org.bukkit.Bukkit.getPlayer(pId);
+                    if (p != null && p.isOnline()) {
+                        sendTo(p, packet);
+                    }
                 }
             }
         }
@@ -71,7 +74,7 @@ public final class CPlaySessionManager {
             for (final UUID assetUUID : assets) {
                 final SessionState state = sessions.get(assetUUID);
                 if (state != null) {
-                    state.removeParticipant(player);
+                    state.removeParticipant(player.getUniqueId());
                     if (state.isEmpty()) {
                         sessions.remove(assetUUID);
                     }
@@ -83,7 +86,7 @@ public final class CPlaySessionManager {
     private void stopSessionForPlayer(final Player player, final UUID assetUUID) {
         final SessionState state = sessions.get(assetUUID);
         if (state != null) {
-            state.removeParticipant(player);
+            state.removeParticipant(player.getUniqueId());
             if (state.isEmpty()) {
                 sessions.remove(assetUUID);
             }
@@ -103,10 +106,12 @@ public final class CPlaySessionManager {
     }
 
     public static final class SessionState {
+        private static final int MAX_DELTA_HISTORY = 1000;
+
         private final UUID assetUUID;
         private final int typeIndex;
         private final String name;
-        private final Set<Player> participants = ConcurrentHashMap.newKeySet();
+        private final Set<UUID> participants = ConcurrentHashMap.newKeySet();
         private final List<byte[]> deltaHistory = Collections.synchronizedList(new ArrayList<>());
 
         public SessionState(final UUID assetUUID, final int typeIndex, final String name) {
@@ -118,12 +123,17 @@ public final class CPlaySessionManager {
         public UUID getAssetUUID() { return assetUUID; }
         public int getTypeIndex() { return typeIndex; }
         public String getName() { return name; }
-        public Set<Player> getParticipants() { return participants; }
+        public Set<UUID> getParticipants() { return participants; }
         public List<byte[]> getDeltaHistory() { return deltaHistory; }
 
-        public void addParticipant(final Player p) { participants.add(p); }
-        public void removeParticipant(final Player p) { participants.remove(p); }
+        public void addParticipant(final UUID p) { participants.add(p); }
+        public void removeParticipant(final UUID p) { participants.remove(p); }
         public boolean isEmpty() { return participants.isEmpty(); }
-        public void addDelta(final byte[] delta) { deltaHistory.add(delta); }
+        public void addDelta(final byte[] delta) {
+            deltaHistory.add(delta);
+            while (deltaHistory.size() > MAX_DELTA_HISTORY) {
+                deltaHistory.remove(0);
+            }
+        }
     }
 }
