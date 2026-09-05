@@ -28,10 +28,20 @@ public final class CPlayAssetHandle implements Comparable<CPlayAssetHandle> {
     }
 
     public static CPlayAssetHandle parse(String s) {
+        if (s == null || s.trim().isEmpty()) {
+            throw new IllegalArgumentException("Handle string cannot be null or empty");
+        }
         final int colon = s.indexOf(':');
         if (colon > 0) {
             char prefix = s.charAt(0);
-            return new CPlayAssetHandle(CPlayAssetNamespace.fromIdentifier(prefix), s.substring(colon + 1));
+            if (prefix != 'c' && prefix != 'C' && prefix != 's' && prefix != 'S') {
+                throw new IllegalArgumentException("Unknown namespace prefix: " + prefix);
+            }
+            final String sub = s.substring(colon + 1);
+            if (sub.isEmpty()) {
+                throw new IllegalArgumentException("Handle part cannot be empty: " + s);
+            }
+            return new CPlayAssetHandle(CPlayAssetNamespace.fromIdentifier(prefix), sub);
         }
         return new CPlayAssetHandle(CPlayAssetNamespace.COMPOSITION, s);
     }

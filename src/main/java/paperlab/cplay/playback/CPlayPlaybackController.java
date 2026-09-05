@@ -64,6 +64,9 @@ public final class CPlayPlaybackController {
             for (final CPlayPlaybackStream stream : CPlayBridge.getPlaybackStreams(level)) {
                 stream.close();
             }
+            for (final CPlayCaptureStream stream : CPlayBridge.getCaptureStreams(level)) {
+                stream.close();
+            }
         }
     }
 

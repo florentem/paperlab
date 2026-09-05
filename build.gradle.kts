@@ -33,8 +33,21 @@ dependencies {
     // netty — буферы протокола, DFU и jspecify — аннотации в сигнатурах NMS-классов.
     // Версии пиним: floating-диапазоны в проверяемой сборке недопустимы.
     compileOnly("io.netty:netty-buffer:4.2.2.Final")
-    compileOnly("com.mojang:datafixerupper:8.0.16")
+    compileOnly("com.mojang:datafixerupper:9.0.19")
     compileOnly("org.jspecify:jspecify:1.0.0")
+
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation("io.papermc.paper:paper-api:26.2.build.92-stable")
+    testImplementation(files("$forkLibs/paper-server/build/libs/paper-server-26.2.local-SNAPSHOT.jar"))
+    testImplementation("io.netty:netty-buffer:4.2.2.Final")
+    testImplementation("io.netty:netty-codec:4.2.2.Final")
+    testImplementation("com.mojang:datafixerupper:9.0.19")
+    testImplementation("org.jspecify:jspecify:1.0.0")
+    testImplementation("ca.spottedleaf:concurrentutil:0.0.3")
+    testImplementation("ca.spottedleaf:leafpile:1.0.0")
+    testImplementation("com.mojang:authlib:7.0.63")
+    testImplementation("it.unimi.dsi:fastutil:8.5.15")
 }
 
 java {
@@ -46,6 +59,10 @@ java {
 tasks {
     compileJava {
         options.encoding = "UTF-8"
+    }
+
+    test {
+        useJUnitPlatform()
     }
 
     processResources {

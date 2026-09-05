@@ -48,6 +48,13 @@ public final class CPlayService implements PluginMessageListener {
 
     public static void disable() {
         if (instance != null) {
+            if (paperlab.core.CPlayBridge.PRESENT) {
+                for (final org.bukkit.World world : Bukkit.getWorlds()) {
+                    if (world instanceof org.bukkit.craftbukkit.CraftWorld cw) {
+                        instance.playbackController.stopAllPlaybacks(cw.getHandle());
+                    }
+                }
+            }
             instance.assetStore.saveHistory();
             instance.assetStore.savePlayers();
             Bukkit.getMessenger().unregisterIncomingPluginChannel(instance.plugin, CPlayProtocol.CHANNEL, instance);
