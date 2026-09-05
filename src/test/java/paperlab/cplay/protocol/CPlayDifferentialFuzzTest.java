@@ -34,7 +34,7 @@ public class CPlayDifferentialFuzzTest {
     // --- 1. Дифференциальный фаззинг генератора и парсера хэндлов (50 000 итераций) ---
     @Test
     @DisplayName("Дифференциальный фаззинг CPlayAssetHandle: генерация, санитизация и граничные строки [50 000 итераций]")
-    public void fuzzAssetHandleGenerationAndParsing() {
+    public void fuzzAssetHandleGenerationAndParsing() throws Exception {
         final String[] charPool = {
             "a", "b", "z", "0", "1", "9", "_", "-", " ", "!", "@", "#", "$", "%", "^", "&", "*", "(", ")",
             "А", "я", "Ж", "ш", "🔥", "🚀", "⚡", "\t", "\n", "\r", "\0", ".", "/", "\\", ":", ";", "'", "\"",
@@ -51,28 +51,38 @@ public class CPlayDifferentialFuzzTest {
             final CPlayAssetNamespace ns = rng.nextBoolean() ? CPlayAssetNamespace.GLOBAL : CPlayAssetNamespace.WORLD;
             final String suffix = rng.nextBoolean() ? String.valueOf(rng.nextInt(100)) : "";
 
-            // 1. Алгоритм плагина
-            final CPlayAssetHandle handle = CPlayAssetHandle.fromName(ns, rawName, suffix);
+            // 1. Реальный класс мода:
+            final com.g4mesoft.captureplayback.common.asset.GSEAssetNamespace modNs =
+                (ns == CPlayAssetNamespace.GLOBAL)
+                    ? com.g4mesoft.captureplayback.common.asset.GSEAssetNamespace.GLOBAL
+                    : com.g4mesoft.captureplayback.common.asset.GSEAssetNamespace.WORLD;
+            final com.g4mesoft.captureplayback.common.asset.GSAssetHandle modHandle =
+                com.g4mesoft.captureplayback.common.asset.GSAssetHandle.fromName(modNs, rawName, suffix);
 
-            // Проверяем инварианты мода G4mespeed GSAssetHandle:
-            assertNotNull(handle);
-            assertEquals(ns, handle.getNamespace());
-            final String handleStr = handle.getHandle();
-            assertFalse(handleStr.isEmpty(), "Хэндл не должен быть пустым");
-            assertTrue(handleStr.length() <= 20, "Длина хэндла не должна превышать 20 символов, получено: " + handleStr.length());
+            // 2. Реальный класс плагина:
+            final CPlayAssetHandle pluginHandle = CPlayAssetHandle.fromName(ns, rawName, suffix);
 
-            // Все символы обязаны быть [0-9a-z_]
-            for (int k = 0; k < handleStr.length(); k++) {
-                final char c = handleStr.charAt(k);
-                final boolean valid = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c == '_');
-                assertTrue(valid, "Недопустимый символ в хэндле: '" + c + "' в хэндле: " + handleStr);
-            }
+            // Попарная посимвольная сверка реального мода и плагина:
+            assertEquals(modHandle.getHandle(), pluginHandle.getHandle(), "Handle mismatch for rawName: '" + rawName + "'");
+            assertEquals(modHandle.toString(), pluginHandle.toString(), "Handle toString mismatch");
+            assertEquals(modHandle.getNamespace().getIndex(), pluginHandle.getNamespace().getIndex());
 
-            // 2. Круговой раундтрип через строковое представление "g:handle" / "w:handle"
-            final String formatted = handle.toString();
-            final CPlayAssetHandle parsed = CPlayAssetHandle.parse(formatted);
-            assertNotNull(parsed);
-            assertEquals(handle, parsed);
+            // Кросс-сериализация: кодируем классом мода GSEncodeBuffer, читаем плагином CPlayWire:
+            final ByteBuf crossBuf = Unpooled.buffer();
+            final com.g4mesoft.util.GSEncodeBuffer encBuf = com.g4mesoft.util.GSEncodeBuffer.wrap(crossBuf);
+            com.g4mesoft.captureplayback.common.asset.GSAssetHandle.write(encBuf, modHandle);
+
+            final CPlayAssetHandle crossReadByPlugin = CPlayWire.readAssetHandle(crossBuf);
+            assertEquals(pluginHandle, crossReadByPlugin);
+
+            // Обратная кросс-сериализация: пишем плагином CPlayWire, читаем классом мода GSDecodeBuffer:
+            crossBuf.clear();
+            CPlayWire.writeAssetHandle(crossBuf, pluginHandle);
+            final com.g4mesoft.util.GSDecodeBuffer decBuf = com.g4mesoft.util.GSDecodeBuffer.wrap(crossBuf);
+            final com.g4mesoft.captureplayback.common.asset.GSAssetHandle crossReadByMod =
+                com.g4mesoft.captureplayback.common.asset.GSAssetHandle.read(decBuf);
+            assertEquals(modHandle, crossReadByMod);
+            crossBuf.release();
         }
     }
 
@@ -346,7 +356,7 @@ public class CPlayDifferentialFuzzTest {
     // --- 6. Дифференциальный фаззинг пакетов кэша игроков (20 000 итераций) ---
     @Test
     @DisplayName("Дифференциальный фаззинг PlayerCache: PaperLab Wire vs Mod Wire [20 000 итераций]")
-    public void fuzzPlayerCachePackets() {
+    public void fuzzPlayerCachePackets() throws Exception {
         for (int i = 0; i < 10_000; i++) {
             // GSPlayerCachePacket
             final int count = rng.nextInt(10);
@@ -371,10 +381,15 @@ public class CPlayDifferentialFuzzTest {
             final UUID addedUUID = UUID.randomUUID();
             final String addedName = generateRandomString(rng, 1, 16);
             final byte[] addedPacket = CPlayWire.encodePlayerCacheAdded(addedUUID, addedName);
+            // Считываем пакет плагина РЕАЛЬНЫМ классом мода GSPlayerCacheEntry через GSDecodeBuffer:
             final ByteBuf aBuf = Unpooled.wrappedBuffer(addedPacket);
             assertEquals(CPlayProtocol.makePacketId(CPlayProtocol.CAPL_UID, CPlayProtocol.PACKET_CAPL_PLAYER_CACHE_ADDED), aBuf.readLong());
-            assertEquals(addedUUID, CPlayWire.readUUID(aBuf));
-            assertEquals(addedName, CPlayWire.readString(aBuf));
+            final com.g4mesoft.util.GSDecodeBuffer aDec = com.g4mesoft.util.GSDecodeBuffer.wrap(aBuf);
+            final UUID modReadUUID = aDec.readUUID();
+            final com.g4mesoft.captureplayback.common.asset.GSPlayerCacheEntry modReadEntry =
+                com.g4mesoft.captureplayback.common.asset.GSPlayerCacheEntry.read(aDec);
+            assertEquals(addedUUID, modReadUUID);
+            assertEquals(addedName, modReadEntry.getName());
             assertEquals(0, aBuf.readableBytes());
             aBuf.release();
         }
