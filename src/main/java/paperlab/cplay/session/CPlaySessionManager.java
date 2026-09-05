@@ -34,8 +34,8 @@ public final class CPlaySessionManager {
             state.addParticipant(player.getUniqueId());
             playerSessions.computeIfAbsent(player.getUniqueId(), k -> ConcurrentHashMap.newKeySet()).add(assetUUID);
 
-            final boolean isOwner = player.getUniqueId().equals(info.getOwnerUUID());
-            final byte[] startPacket = CPlayWire.encodeSessionStart(assetUUID, info.getTypeIndex(), info.getAssetName(), isOwner, player.getUniqueId());
+            final byte[] assetData = assetStore.getAssetData(assetUUID);
+            final byte[] startPacket = CPlayWire.encodeSessionStart(info, assetData);
             sendTo(player, startPacket);
 
             // Синхронизируем уже накопленные дельты сессии

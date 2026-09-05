@@ -166,17 +166,30 @@ public final class CPlayWire {
         return out;
     }
 
+    public static void writeAssetHandle(final ByteBuf buf, final CPlayAssetHandle handle) {
+        buf.writeByte((byte) handle.getNamespace().getIndex());
+        writeString(buf, handle.getHandle());
+    }
+
+    public static CPlayAssetHandle readAssetHandle(final ByteBuf buf) {
+        final int nsIndex = buf.readByte() & 0xFF;
+        final CPlayAssetNamespace ns = CPlayAssetNamespace.fromIndex(nsIndex);
+        if (ns == null) {
+            throw new IllegalArgumentException("Unknown namespace index: " + nsIndex);
+        }
+        final String handleStr = readString(buf);
+        return new CPlayAssetHandle(ns, handleStr);
+    }
+
     public static void writeAssetInfo(final ByteBuf buf, final CPlayAssetInfo info) {
         buf.writeByte((byte) info.getTypeIndex());
         writeUUID(buf, info.getAssetUUID());
 
         // GSAssetHandle
         if (info.getHandle() != null) {
-            buf.writeByte((byte) info.getHandle().getNamespace().getIndex());
-            writeString(buf, info.getHandle().getHandle());
+            writeAssetHandle(buf, info.getHandle());
         } else {
-            buf.writeByte(0);
-            writeString(buf, "default");
+            writeAssetHandle(buf, new CPlayAssetHandle(CPlayAssetNamespace.GLOBAL, "default"));
         }
 
         writeString(buf, info.getAssetName());
@@ -195,9 +208,7 @@ public final class CPlayWire {
     public static CPlayAssetInfo readAssetInfo(final ByteBuf buf) {
         final int typeIndex = buf.readByte() & 0xFF;
         final UUID assetUUID = readUUID(buf);
-        final int nsIndex = buf.readByte() & 0xFF;
-        final String handleStr = readString(buf);
-        final CPlayAssetHandle handle = new CPlayAssetHandle(CPlayAssetNamespace.fromIndex(nsIndex), handleStr);
+        final CPlayAssetHandle handle = readAssetHandle(buf);
         final String name = readString(buf);
         final long created = buf.readLong();
         final long modified = buf.readLong();
@@ -278,26 +289,171 @@ public final class CPlayWire {
         return out;
     }
 
-    public static byte[] encodeSessionStart(final UUID assetUUID, final int sessionTypeIndex, final String assetName, final boolean isOwner, final UUID clientUUID) {
+    public static int extractAssetPayloadOffset(final byte[] fileData) {
+        if (fileData == null || fileData.length < 2) return 0;
+        final ByteBuf buf = Unpooled.wrappedBuffer(fileData);
+        try {
+            int formatVersion = buf.readByte() & 0xFF;
+            if ((formatVersion & 0x80) != 0) {
+                formatVersion &= ~0x80;
+                buf.readByte(); // typeIndex
+            }
+            buf.readLong(); // createdTimestamp
+            readUUID(buf); // createdByUUID
+            if (formatVersion >= 1) {
+                final boolean hasPlayerEntry = buf.readBoolean();
+                if (hasPlayerEntry) {
+                    readString(buf); // entry name
+                }
+            }
+            return buf.readerIndex();
+        } catch (final Exception e) {
+            return 0;
+        } finally {
+            buf.release();
+        }
+    }
+
+    public static byte[] encodeDefaultAssetFile(final CPlayAssetInfo info) {
+        final ByteBuf buf = Unpooled.buffer();
+        // GSAssetFileHeader: version 0x81 (0x80 | 1)
+        buf.writeByte((byte) (0x80 | 1));
+        buf.writeByte((byte) info.getTypeIndex());
+        buf.writeLong(info.getCreatedTimestamp());
+        writeUUID(buf, info.getCreatedByUUID());
+        buf.writeBoolean(false); // no player cache entry
+
+        // Asset payload
+        if (info.getTypeIndex() == 0) {
+            // Empty GSComposition
+            buf.writeByte(0); // reserved byte
+            writeUUID(buf, info.getAssetUUID());
+            writeString(buf, info.getAssetName());
+            buf.writeInt(0); // groupCount
+            buf.writeInt(0); // trackCount
+        } else {
+            // Empty GSSequence
+            buf.writeByte(0); // reserved byte
+            writeUUID(buf, info.getAssetUUID());
+            writeString(buf, info.getAssetName());
+            buf.writeInt(0); // channelCount
+        }
+
+        final byte[] out = new byte[buf.readableBytes()];
+        buf.readBytes(out);
+        buf.release();
+        return out;
+    }
+
+    public static byte[] encodeSessionStart(final CPlayAssetInfo info, final byte[] existingAssetData) {
         final ByteBuf buf = Unpooled.buffer();
         buf.writeLong(CPlayProtocol.makePacketId(CPlayProtocol.CAPL_UID, CPlayProtocol.PACKET_CAPL_SESSION_START));
 
-        buf.writeInt(sessionTypeIndex);
+        final int typeIndex = info.getTypeIndex();
+        buf.writeInt(typeIndex);
 
-        // Session fields (fieldCount: 4)
-        buf.writeInt(4);
+        final UUID assetUUID = info.getAssetUUID();
+        final CPlayAssetHandle handle = (info.getHandle() != null) ? info.getHandle() : new CPlayAssetHandle(CPlayAssetNamespace.GLOBAL, "default");
+        final String name = info.getAssetName();
 
-        // field 1: assetUUID
-        writeSessionField(buf, "assetUUID", fBuf -> writeUUID(fBuf, assetUUID));
+        if (typeIndex == 0) {
+            // COMPOSITION (7 fields)
+            buf.writeInt(7);
 
-        // field 2: name
-        writeSessionField(buf, "name", fBuf -> writeString(fBuf, assetName));
+            // 1. assetUUID
+            writeSessionField(buf, "assetUUID", fBuf -> {
+                fBuf.writeBoolean(true);
+                writeUUID(fBuf, assetUUID);
+            });
 
-        // field 3: isOwner
-        writeSessionField(buf, "isOwner", fBuf -> fBuf.writeBoolean(isOwner));
+            // 2. assetHandle
+            writeSessionField(buf, "assetHandle", fBuf -> {
+                fBuf.writeBoolean(true);
+                writeAssetHandle(fBuf, handle);
+            });
 
-        // field 4: clientUUID
-        writeSessionField(buf, "clientUUID", fBuf -> writeUUID(fBuf, clientUUID));
+            // 3. xOffset
+            writeSessionField(buf, "xOffset", fBuf -> fBuf.writeFloat(0.0f));
+
+            // 4. yOffset
+            writeSessionField(buf, "yOffset", fBuf -> fBuf.writeFloat(0.0f));
+
+            // 5. undoRedoHistory
+            writeSessionField(buf, "undoRedoHistory", fBuf -> {
+                fBuf.writeBoolean(true);
+                fBuf.writeInt(0);
+                fBuf.writeInt(0);
+            });
+
+            // 6. composition
+            writeSessionField(buf, "composition", fBuf -> {
+                fBuf.writeBoolean(true);
+                if (existingAssetData != null && existingAssetData.length > 27) {
+                    final int payloadOffset = extractAssetPayloadOffset(existingAssetData);
+                    fBuf.writeBytes(existingAssetData, payloadOffset, existingAssetData.length - payloadOffset);
+                } else {
+                    fBuf.writeByte(0); // reserved byte
+                    writeUUID(fBuf, assetUUID);
+                    writeString(fBuf, name);
+                    fBuf.writeInt(0); // groupCount
+                    fBuf.writeInt(0); // trackCount
+                }
+            });
+
+            // 7. gametickWidth
+            writeSessionField(buf, "gametickWidth", fBuf -> fBuf.writeDouble(8.0));
+        } else {
+            // SEQUENCE (9 fields)
+            buf.writeInt(9);
+
+            // 1. assetUUID
+            writeSessionField(buf, "assetUUID", fBuf -> {
+                fBuf.writeBoolean(true);
+                writeUUID(fBuf, assetUUID);
+            });
+
+            // 2. assetHandle
+            writeSessionField(buf, "assetHandle", fBuf -> {
+                fBuf.writeBoolean(true);
+                writeAssetHandle(fBuf, handle);
+            });
+
+            // 3. xOffset
+            writeSessionField(buf, "xOffset", fBuf -> fBuf.writeFloat(0.0f));
+
+            // 4. yOffset
+            writeSessionField(buf, "yOffset", fBuf -> fBuf.writeFloat(0.0f));
+
+            // 5. undoRedoHistory
+            writeSessionField(buf, "undoRedoHistory", fBuf -> {
+                fBuf.writeBoolean(true);
+                fBuf.writeInt(0);
+                fBuf.writeInt(0);
+            });
+
+            // 6. sequence
+            writeSessionField(buf, "sequence", fBuf -> {
+                fBuf.writeBoolean(true);
+                if (existingAssetData != null && existingAssetData.length > 27) {
+                    final int payloadOffset = extractAssetPayloadOffset(existingAssetData);
+                    fBuf.writeBytes(existingAssetData, payloadOffset, existingAssetData.length - payloadOffset);
+                } else {
+                    fBuf.writeByte(0); // reserved byte
+                    writeUUID(fBuf, assetUUID);
+                    writeString(fBuf, name);
+                    fBuf.writeInt(0); // channelCount
+                }
+            });
+
+            // 7. selectedChannel
+            writeSessionField(buf, "selectedChannel", fBuf -> fBuf.writeBoolean(false)); // null
+
+            // 8. minExpandedColumn
+            writeSessionField(buf, "minExpandedColumn", fBuf -> fBuf.writeInt(-1));
+
+            // 9. maxExpandedColumn
+            writeSessionField(buf, "maxExpandedColumn", fBuf -> fBuf.writeInt(-1));
+        }
 
         final byte[] out = new byte[buf.readableBytes()];
         buf.readBytes(out);
@@ -328,16 +484,13 @@ public final class CPlayWire {
         return out;
     }
 
-    private static void writeSessionField(final ByteBuf out, final String name, final java.util.function.Consumer<ByteBuf> writer) {
+    public static void writeSessionField(final ByteBuf parentBuf, final String name, final java.util.function.Consumer<ByteBuf> writer) {
         final ByteBuf fieldBuf = Unpooled.buffer();
+        writeString(fieldBuf, name);
         writer.accept(fieldBuf);
 
-        // type name
-        writeString(out, name);
-        // size in bytes
-        out.writeInt(fieldBuf.readableBytes());
-        // field data
-        out.writeBytes(fieldBuf);
+        parentBuf.writeInt(fieldBuf.readableBytes());
+        parentBuf.writeBytes(fieldBuf);
         fieldBuf.release();
     }
 }

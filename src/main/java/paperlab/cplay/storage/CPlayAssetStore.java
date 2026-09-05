@@ -73,14 +73,52 @@ public final class CPlayAssetStore {
     }
 
     public CPlayAssetInfo createAsset(final CPlayAssetType type, final String name, final Player creator) {
+        return createAsset(type, null, name, creator);
+    }
+
+    public CPlayAssetInfo createAsset(final CPlayAssetType type, final CPlayAssetHandle handle, final String name, final Player creator) {
         final UUID assetUUID = UUID.randomUUID();
-        final CPlayAssetNamespace ns = (type == CPlayAssetType.COMPOSITION) ? CPlayAssetNamespace.COMPOSITION : CPlayAssetNamespace.SEQUENCE;
-        final CPlayAssetHandle handle = CPlayAssetHandle.random(ns, 6);
         final long now = System.currentTimeMillis();
         final UUID creatorUUID = (creator != null) ? creator.getUniqueId() : CPlayAssetInfo.UNKNOWN_OWNER_UUID;
 
-        final CPlayAssetInfo info = new CPlayAssetInfo(type.getIndex(), assetUUID, handle, name, now, now, creatorUUID, creatorUUID);
+        final CPlayAssetHandle finalHandle;
+        if (handle != null && !assetsByHandle.containsKey(handle)) {
+            finalHandle = handle;
+        } else {
+            final CPlayAssetNamespace ns = (handle != null) ? handle.getNamespace() : CPlayAssetNamespace.GLOBAL;
+            finalHandle = CPlayAssetHandle.fromNameUnique(ns, name, assetsByHandle::containsKey);
+        }
+
+        final CPlayAssetInfo info = new CPlayAssetInfo(type.getIndex(), assetUUID, finalHandle, name, now, now, creatorUUID, creatorUUID);
         registerAsset(info);
+        saveAssetData(assetUUID, CPlayWire.encodeDefaultAssetFile(info));
+        saveHistory();
+        return info;
+    }
+
+    public CPlayAssetInfo createDuplicateAsset(final CPlayAssetHandle handle, final String name, final CPlayAssetInfo origInfo, final Player creator) {
+        final UUID assetUUID = UUID.randomUUID();
+        final long now = System.currentTimeMillis();
+        final UUID creatorUUID = (creator != null) ? creator.getUniqueId() : CPlayAssetInfo.UNKNOWN_OWNER_UUID;
+
+        final CPlayAssetHandle finalHandle;
+        if (handle != null && !assetsByHandle.containsKey(handle)) {
+            finalHandle = handle;
+        } else {
+            final CPlayAssetNamespace ns = (handle != null) ? handle.getNamespace() : origInfo.getHandle().getNamespace();
+            finalHandle = CPlayAssetHandle.fromNameUnique(ns, name, assetsByHandle::containsKey);
+        }
+
+        final CPlayAssetType type = origInfo.getType();
+        final CPlayAssetInfo info = new CPlayAssetInfo(type.getIndex(), assetUUID, finalHandle, name, now, now, origInfo.getCreatedByUUID(), creatorUUID);
+        registerAsset(info);
+
+        final byte[] origData = getAssetData(origInfo.getAssetUUID());
+        if (origData != null) {
+            saveAssetData(assetUUID, origData);
+        } else {
+            saveAssetData(assetUUID, CPlayWire.encodeDefaultAssetFile(info));
+        }
         saveHistory();
         return info;
     }
@@ -92,13 +130,23 @@ public final class CPlayAssetStore {
         }
     }
 
+    private File getAssetFile(final CPlayAssetInfo info) {
+        final File primary = new File(assetsDir, info.getAssetUUID().toString() + ".gsa");
+        if (primary.exists()) return primary;
+        final File legacyComp = new File(assetsDir, info.getAssetUUID().toString() + ".gcomp");
+        if (legacyComp.exists()) return legacyComp;
+        final File legacySeq = new File(assetsDir, info.getAssetUUID().toString() + ".gseq");
+        if (legacySeq.exists()) return legacySeq;
+        return primary;
+    }
+
     public boolean deleteAsset(final UUID assetUUID) {
         final CPlayAssetInfo info = assetsByUuid.remove(assetUUID);
         if (info != null) {
             if (info.getHandle() != null) {
                 assetsByHandle.remove(info.getHandle());
             }
-            final File file = new File(assetsDir, assetUUID.toString() + info.getType().getExtension());
+            final File file = getAssetFile(info);
             if (file.exists()) {
                 file.delete();
             }
@@ -111,7 +159,7 @@ public final class CPlayAssetStore {
     public byte[] getAssetData(final UUID assetUUID) {
         final CPlayAssetInfo info = getAsset(assetUUID);
         if (info == null) return null;
-        final File file = new File(assetsDir, assetUUID.toString() + info.getType().getExtension());
+        final File file = getAssetFile(info);
         if (file.exists()) {
             try {
                 return Files.readAllBytes(file.toPath());
@@ -135,7 +183,7 @@ public final class CPlayAssetStore {
     public void saveAssetData(final UUID assetUUID, final byte[] data) {
         final CPlayAssetInfo info = getAsset(assetUUID);
         if (info == null) return;
-        final File file = new File(assetsDir, assetUUID.toString() + info.getType().getExtension());
+        final File file = new File(assetsDir, assetUUID.toString() + ".gsa");
         try {
             atomicWrite(file, data);
             info.setLastModifiedTimestamp(System.currentTimeMillis());

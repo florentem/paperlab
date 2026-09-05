@@ -12,6 +12,7 @@ import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
 import net.minecraft.network.protocol.common.custom.DiscardedPayload;
 import net.minecraft.resources.Identifier;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
+import paperlab.cplay.model.CPlayAssetHandle;
 import paperlab.cplay.model.CPlayAssetInfo;
 import paperlab.cplay.model.CPlayAssetType;
 import paperlab.cplay.playback.CPlayPlaybackController;
@@ -171,9 +172,28 @@ public final class CPlayService implements PluginMessageListener {
                 send(player, CPlayWire.encodeAssetRequestResponseDenied(assetUUID));
             }
             case CPlayProtocol.PACKET_CAPL_CREATE_ASSET -> {
-                final int typeIndex = buf.readByte() & 0xFF;
                 final String name = CPlayWire.readString(buf);
-                final CPlayAssetInfo info = assetStore.createAsset(CPlayAssetType.fromIndex(typeIndex), name, player);
+                final int typeIndex = buf.readByte() & 0xFF;
+                final CPlayAssetType type = CPlayAssetType.fromIndex(typeIndex);
+                if (type == null) {
+                    logger.warning("Unknown asset type index: " + typeIndex);
+                    return;
+                }
+                final CPlayAssetHandle handle = CPlayWire.readAssetHandle(buf);
+                final boolean hasOriginal = buf.readBoolean();
+                final UUID originalUUID = hasOriginal ? CPlayWire.readUUID(buf) : null;
+
+                final CPlayAssetInfo info;
+                if (originalUUID != null) {
+                    final CPlayAssetInfo origInfo = assetStore.getAsset(originalUUID);
+                    if (origInfo != null && (origInfo.hasPermission(player) || player.hasPermission("paperlab.cplay.admin"))) {
+                        info = assetStore.createDuplicateAsset(handle, name, origInfo, player);
+                    } else {
+                        return;
+                    }
+                } else {
+                    info = assetStore.createAsset(type, handle, name, player);
+                }
                 broadcast(CPlayWire.encodeAssetInfoChanged(info), null);
             }
             case CPlayProtocol.PACKET_CAPL_DELETE_ASSET -> {
@@ -185,26 +205,36 @@ public final class CPlayService implements PluginMessageListener {
                 }
             }
             case CPlayProtocol.PACKET_CAPL_IMPORT_ASSET -> {
-                final int typeIndex = buf.readByte() & 0xFF;
                 final String name = CPlayWire.readString(buf);
+                final CPlayAssetHandle handle = CPlayWire.readAssetHandle(buf);
                 final byte[] fileContent = new byte[buf.readableBytes()];
                 buf.readBytes(fileContent);
 
-                final CPlayAssetInfo info = assetStore.createAsset(CPlayAssetType.fromIndex(typeIndex), name, player);
+                int typeIndex = 0;
+                if (fileContent.length >= 2) {
+                    int fmt = fileContent[0] & 0xFF;
+                    if ((fmt & 0x80) != 0) {
+                        typeIndex = fileContent[1] & 0xFF;
+                    } else {
+                        typeIndex = fmt;
+                    }
+                }
+                final CPlayAssetType type = CPlayAssetType.fromIndex(typeIndex) != null ? CPlayAssetType.fromIndex(typeIndex) : CPlayAssetType.COMPOSITION;
+                final CPlayAssetInfo info = assetStore.createAsset(type, handle, name, player);
                 assetStore.saveAssetData(info.getAssetUUID(), fileContent);
                 broadcast(CPlayWire.encodeAssetInfoChanged(info), null);
             }
             case CPlayProtocol.PACKET_CAPL_COLLABORATOR -> {
                 final UUID assetUUID = CPlayWire.readUUID(buf);
                 final UUID collabUUID = CPlayWire.readUUID(buf);
-                final boolean add = buf.readBoolean();
+                final boolean removed = buf.readBoolean();
 
                 final CPlayAssetInfo info = assetStore.getAsset(assetUUID);
-                if (info != null && info.getOwnerUUID().equals(player.getUniqueId())) {
-                    if (add) {
-                        info.addCollaborator(collabUUID);
-                    } else {
+                if (info != null && (info.getOwnerUUID().equals(player.getUniqueId()) || player.hasPermission("paperlab.cplay.admin"))) {
+                    if (removed) {
                         info.removeCollaborator(collabUUID);
+                    } else {
+                        info.addCollaborator(collabUUID);
                     }
                     assetStore.saveHistory();
                     broadcast(CPlayWire.encodeAssetInfoChanged(info), null);

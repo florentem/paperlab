@@ -42,7 +42,7 @@ public class CPlayAssetStoreTest {
     public void testAssetRegisterAndLookup() {
         final UUID assetUUID = UUID.randomUUID();
         final UUID ownerUUID = UUID.randomUUID();
-        final CPlayAssetHandle handle = new CPlayAssetHandle(CPlayAssetNamespace.COMPOSITION, "mycomp");
+        final CPlayAssetHandle handle = new CPlayAssetHandle(CPlayAssetNamespace.GLOBAL, "mycomp");
         final CPlayAssetInfo info = new CPlayAssetInfo(0, assetUUID, handle, "TestComp", 100L, 100L, ownerUUID, ownerUUID);
 
         store.registerAsset(info);
@@ -57,7 +57,7 @@ public class CPlayAssetStoreTest {
     @Test
     public void testDeleteAsset() {
         final UUID assetUUID = UUID.randomUUID();
-        final CPlayAssetHandle handle = new CPlayAssetHandle(CPlayAssetNamespace.SEQUENCE, "myseq");
+        final CPlayAssetHandle handle = new CPlayAssetHandle(CPlayAssetNamespace.WORLD, "myseq");
         final CPlayAssetInfo info = new CPlayAssetInfo(1, assetUUID, handle, "TestSeq", 100L, 100L, UUID.randomUUID(), UUID.randomUUID());
 
         store.registerAsset(info);
@@ -73,7 +73,7 @@ public class CPlayAssetStoreTest {
     @Test
     public void testAtomicSaveAndLoadData() {
         final UUID assetUUID = UUID.randomUUID();
-        final CPlayAssetHandle handle = new CPlayAssetHandle(CPlayAssetNamespace.COMPOSITION, "cdata");
+        final CPlayAssetHandle handle = new CPlayAssetHandle(CPlayAssetNamespace.GLOBAL, "cdata");
         final CPlayAssetInfo info = new CPlayAssetInfo(0, assetUUID, handle, "DataComp", 100L, 100L, UUID.randomUUID(), UUID.randomUUID());
         store.registerAsset(info);
 
@@ -90,7 +90,7 @@ public class CPlayAssetStoreTest {
         final UUID assetUUID = UUID.randomUUID();
         final UUID ownerUUID = UUID.randomUUID();
         final UUID collabUUID = UUID.randomUUID();
-        final CPlayAssetHandle handle = new CPlayAssetHandle(CPlayAssetNamespace.SEQUENCE, "persist");
+        final CPlayAssetHandle handle = new CPlayAssetHandle(CPlayAssetNamespace.WORLD, "persist");
         final CPlayAssetInfo info = new CPlayAssetInfo(1, assetUUID, handle, "PersistSeq", 100L, 200L, ownerUUID, ownerUUID);
         info.addCollaborator(collabUUID);
         store.registerAsset(info);

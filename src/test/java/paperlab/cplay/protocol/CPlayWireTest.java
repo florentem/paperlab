@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import paperlab.cplay.model.CPlayAssetHandle;
 import paperlab.cplay.model.CPlayAssetInfo;
 import paperlab.cplay.model.CPlayAssetNamespace;
+import paperlab.cplay.model.CPlayAssetType;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -94,7 +95,7 @@ public class CPlayWireTest {
         final UUID ownerUUID = UUID.randomUUID();
         final UUID collab1 = UUID.randomUUID();
         final UUID collab2 = UUID.randomUUID();
-        final CPlayAssetHandle handle = new CPlayAssetHandle(CPlayAssetNamespace.SEQUENCE, "seq123");
+        final CPlayAssetHandle handle = new CPlayAssetHandle(CPlayAssetNamespace.GLOBAL, "seq123");
 
         final CPlayAssetInfo original = new CPlayAssetInfo(1, assetUUID, handle, "TestSequence", 1000L, 2000L, creatorUUID, ownerUUID);
         original.addCollaborator(collab1);
@@ -137,7 +138,8 @@ public class CPlayWireTest {
         final UUID assetUUID = UUID.randomUUID();
         final UUID clientUUID = UUID.randomUUID();
 
-        final byte[] start = CPlayWire.encodeSessionStart(assetUUID, 0, "CompAsset", true, clientUUID);
+        final CPlayAssetInfo info = new CPlayAssetInfo(0, assetUUID, new CPlayAssetHandle(CPlayAssetNamespace.GLOBAL, "comp123"), "CompAsset", 1000L, 1000L, clientUUID, clientUUID);
+        final byte[] start = CPlayWire.encodeSessionStart(info, null);
         assertNotNull(start);
         assertTrue(start.length > 8);
 
@@ -176,5 +178,100 @@ public class CPlayWireTest {
 
         final byte[] removeBytes = CPlayWire.encodePlayerCacheRemoved(u1);
         assertNotNull(removeBytes);
+    }
+
+    @Test
+    public void testCreateAssetPacketParsing() {
+        final ByteBuf buf = Unpooled.buffer();
+        final String assetName = "MyTestComposition";
+        final int typeIndex = 0; // COMPOSITION
+        final CPlayAssetHandle handle = new CPlayAssetHandle(CPlayAssetNamespace.GLOBAL, "my_test");
+
+        // Write wire format matching G4mespeed GSCreateAssetPacket:
+        // 1. name (writeString)
+        CPlayWire.writeString(buf, assetName);
+        // 2. type (unsigned byte)
+        buf.writeByte(typeIndex);
+        // 3. handle (GSAssetHandle: namespace byte + handle string)
+        CPlayWire.writeAssetHandle(buf, handle);
+        // 4. originalAssetUUID (boolean false)
+        buf.writeBoolean(false);
+
+        // Deserialization as in CPlayService:
+        final String readName = CPlayWire.readString(buf);
+        assertEquals(assetName, readName);
+
+        final int readTypeIndex = buf.readByte() & 0xFF;
+        assertEquals(typeIndex, readTypeIndex);
+        assertEquals(CPlayAssetType.COMPOSITION, CPlayAssetType.fromIndex(readTypeIndex));
+
+        final CPlayAssetHandle readHandle = CPlayWire.readAssetHandle(buf);
+        assertEquals(handle.getNamespace(), readHandle.getNamespace());
+        assertEquals(handle.getHandle(), readHandle.getHandle());
+
+        final boolean hasOriginal = buf.readBoolean();
+        assertFalse(hasOriginal);
+        assertEquals(0, buf.readableBytes());
+        buf.release();
+    }
+
+    @Test
+    public void testSessionStartModFraming() {
+        final UUID assetUUID = UUID.randomUUID();
+        final UUID creatorUUID = UUID.randomUUID();
+        final CPlayAssetHandle handle = new CPlayAssetHandle(CPlayAssetNamespace.GLOBAL, "comp_test");
+        final CPlayAssetInfo info = new CPlayAssetInfo(0, assetUUID, handle, "TestComp", 5000L, 5000L, creatorUUID, creatorUUID);
+
+        final byte[] packetBytes = CPlayWire.encodeSessionStart(info, null);
+        final ByteBuf buf = Unpooled.wrappedBuffer(packetBytes);
+
+        // 1. packetId
+        assertEquals(CPlayProtocol.makePacketId(CPlayProtocol.CAPL_UID, CPlayProtocol.PACKET_CAPL_SESSION_START), buf.readLong());
+
+        // 2. session type (0 for COMPOSITION)
+        assertEquals(0, buf.readInt());
+
+        // 3. field count (7 for COMPOSITION)
+        final int fieldCount = buf.readInt();
+        assertEquals(7, fieldCount);
+
+        // Verify each field: sizeInBytes, then field payload (which starts with string fieldName)
+        for (int i = 0; i < fieldCount; i++) {
+            final int sizeInBytes = buf.readInt();
+            assertTrue(sizeInBytes > 0);
+            final int readerBefore = buf.readerIndex();
+            final String fieldName = CPlayWire.readString(buf);
+            assertNotNull(fieldName);
+            final int readBytes = buf.readerIndex() - readerBefore;
+            // Skip remainder of this field
+            buf.skipBytes(sizeInBytes - readBytes);
+        }
+
+        assertEquals(0, buf.readableBytes());
+        buf.release();
+    }
+
+    @Test
+    public void testDefaultAssetFileAndPayloadOffset() {
+        final UUID assetUUID = UUID.randomUUID();
+        final UUID creatorUUID = UUID.randomUUID();
+        final CPlayAssetHandle handle = new CPlayAssetHandle(CPlayAssetNamespace.GLOBAL, "comp_test");
+        final CPlayAssetInfo info = new CPlayAssetInfo(0, assetUUID, handle, "TestComp", 5000L, 5000L, creatorUUID, creatorUUID);
+
+        final byte[] fileBytes = CPlayWire.encodeDefaultAssetFile(info);
+        assertNotNull(fileBytes);
+        assertTrue(fileBytes.length > 27);
+
+        final int payloadOffset = CPlayWire.extractAssetPayloadOffset(fileBytes);
+        assertTrue(payloadOffset >= 27);
+
+        // Payload should start with reserved byte 0x00, then assetUUID, then name
+        final ByteBuf payloadBuf = Unpooled.wrappedBuffer(fileBytes, payloadOffset, fileBytes.length - payloadOffset);
+        assertEquals(0, payloadBuf.readByte()); // reserved byte
+        assertEquals(assetUUID, CPlayWire.readUUID(payloadBuf));
+        assertEquals("TestComp", CPlayWire.readString(payloadBuf));
+        assertEquals(0, payloadBuf.readInt()); // groupCount
+        assertEquals(0, payloadBuf.readInt()); // trackCount
+        payloadBuf.release();
     }
 }

@@ -1,8 +1,8 @@
 package paperlab.cplay.model;
 
 public enum CPlayAssetType {
-    SEQUENCE(0, ".gseq", "Sequence"),
-    COMPOSITION(1, ".gcomp", "Composition");
+    COMPOSITION(0, ".gsa", "Composition"),
+    SEQUENCE(1, ".gsa", "Sequence");
 
     private final int index;
     private final String extension;
@@ -19,6 +19,6 @@ public enum CPlayAssetType {
     public String getDisplayName() { return displayName; }
 
     public static CPlayAssetType fromIndex(int index) {
-        return (index == 0) ? SEQUENCE : COMPOSITION;
+        return (index == 0) ? COMPOSITION : (index == 1 ? SEQUENCE : null);
     }
 }
