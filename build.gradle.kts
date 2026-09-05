@@ -50,8 +50,6 @@ dependencies {
     testImplementation("it.unimi.dsi:fastutil:8.5.15")
     testImplementation("io.leangen.geantyref:geantyref:1.3.15")
     testImplementation("net.kyori:adventure-text-serializer-ansi:5.2.0")
-    testImplementation("net.fabricmc:fabric-loader:0.16.10")
-    testImplementation(fileTree("libs") { include("*.jar") })
 }
 
 java {
