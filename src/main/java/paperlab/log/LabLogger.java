@@ -31,8 +31,8 @@ public final class LabLogger {
     /** Опция задаётся свободным текстом (ником) и по списку не проверяется. */
     private final boolean freeform;
 
-    /** ник подписчика → упорядоченный набор его опций. */
-    private final Map<String, LinkedHashSet<String>> subscribers = new ConcurrentHashMap<>();
+    /** ник подписчика → упорядоченный неизменяемый набор его опций. */
+    private final Map<String, Set<String>> subscribers = new ConcurrentHashMap<>();
 
     LabLogger(final String name, final boolean freeform, final String defaultOption, final List<String> options) {
         this.name = name;
@@ -68,14 +68,14 @@ public final class LabLogger {
         return !this.subscribers.isEmpty();
     }
 
-    public Map<String, LinkedHashSet<String>> subscribers() {
+    public Map<String, Set<String>> subscribers() {
         return java.util.Collections.unmodifiableMap(this.subscribers);
     }
 
     /** Все опции игрока в порядке подписки. Пустая коллекция — не подписан. */
     public Collection<String> optionsFor(final String playerName) {
-        final LinkedHashSet<String> set = this.subscribers.get(playerName);
-        return set == null ? List.of() : List.copyOf(set);
+        final Set<String> set = this.subscribers.get(playerName);
+        return set == null ? List.of() : set;
     }
 
     public boolean subscribed(final String playerName) {
@@ -93,41 +93,44 @@ public final class LabLogger {
      *
      * @return {@code true}, если после вызова подписка на эту цель есть
      */
-    public boolean toggle(final String playerName, final @Nullable String option) {
+    public synchronized boolean toggle(final String playerName, final @Nullable String option) {
         String normalized = option == null ? "" : option.trim();
         if (normalized.isEmpty() && !this.defaultOption.isEmpty()) {
             normalized = this.defaultOption;
         }
         final String target = targetOf(normalized);
 
-        final LinkedHashSet<String> set =
-            this.subscribers.computeIfAbsent(playerName, k -> new LinkedHashSet<>());
+        final Set<String> current = this.subscribers.get(playerName);
+        final LinkedHashSet<String> newSet = current != null ? new LinkedHashSet<>(current) : new LinkedHashSet<>();
 
         String existing = null;
-        for (final String current : set) {
-            if (targetOf(current).equals(target)) {
-                existing = current;
+        for (final String s : newSet) {
+            if (targetOf(s).equals(target)) {
+                existing = s;
                 break;
             }
         }
 
         if (existing != null) {
-            set.remove(existing);
+            newSet.remove(existing);
             if (existing.equals(normalized)) {
                 // Та же самая подписка — это выключение.
-                if (set.isEmpty()) {
+                if (newSet.isEmpty()) {
                     this.subscribers.remove(playerName);
+                } else {
+                    this.subscribers.put(playerName, Set.copyOf(newSet));
                 }
                 return false;
             }
         }
 
-        set.add(normalized);
+        newSet.add(normalized);
+        this.subscribers.put(playerName, Set.copyOf(newSet));
         return true;
     }
 
     /** Снять все подписки игрока на этот логгер. */
-    public boolean unsubscribeAll(final String playerName) {
+    public synchronized boolean unsubscribeAll(final String playerName) {
         return this.subscribers.remove(playerName) != null;
     }
 

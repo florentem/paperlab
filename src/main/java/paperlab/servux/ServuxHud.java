@@ -239,8 +239,9 @@ public final class ServuxHud implements PluginMessageListener {
         if (wanted.isEmpty()) {
             LOGGERS.remove(player.getUniqueId());
         } else {
-            LOGGERS.put(player.getUniqueId(), wanted);
-            sendLoggerData(player, wanted);
+            final Set<String> copy = Set.copyOf(wanted);
+            LOGGERS.put(player.getUniqueId(), copy);
+            sendLoggerData(player, copy);
         }
         if (DEBUG) {
             plugin.getLogger().info("Servux hud: " + player.getName() + " loggers " + wanted);
@@ -250,6 +251,9 @@ public final class ServuxHud implements PluginMessageListener {
     /** Тик логгеров и погоды. Вызывается из общего тика плагина. */
     public static void tick() {
         tickCounter++;
+        if (tickCounter >= 1_000_000) {
+            tickCounter = 0;
+        }
         if (!REGISTERED.isEmpty() && tickCounter % WEATHER_PERIOD_TICKS == 0) {
             for (final Player player : Bukkit.getOnlinePlayers()) {
                 if (REGISTERED.contains(player.getUniqueId())) {

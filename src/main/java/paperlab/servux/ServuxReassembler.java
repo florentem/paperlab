@@ -1,7 +1,7 @@
 package paperlab.servux;
 
 import io.netty.buffer.Unpooled;
-import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
 import java.util.UUID;
 import net.minecraft.nbt.CompoundTag;
@@ -30,7 +30,7 @@ public final class ServuxReassembler {
     /** Столько же, сколько {@code DEFAULT_MAX_RECEIVE_SIZE_C2S} у Servux: 16 МиБ. */
     private static final int MAX_TOTAL = 16 * 1024 * 1024;
 
-    private static final Map<String, Session> SESSIONS = new HashMap<>();
+    private static final Map<String, Session> SESSIONS = new ConcurrentHashMap<>();
 
     private static final class Session {
         private final byte[] buffer;
@@ -63,22 +63,27 @@ public final class ServuxReassembler {
                 throw new IllegalArgumentException("declared size " + total + " out of range");
             }
             session = new Session(total);
-            SESSIONS.put(key, session);
+            final Session prev = SESSIONS.putIfAbsent(key, session);
+            if (prev != null) {
+                session = prev;
+            }
         }
 
-        final int available = buf.readableBytes();
-        if (session.filled + available > session.buffer.length) {
+        synchronized (session) {
+            final int available = buf.readableBytes();
+            if (session.filled + available > session.buffer.length) {
+                SESSIONS.remove(key);
+                throw new IllegalArgumentException("slice overflows the declared size");
+            }
+            buf.readBytes(session.buffer, session.filled, available);
+            session.filled += available;
+
+            if (session.filled < session.buffer.length) {
+                return null;
+            }
             SESSIONS.remove(key);
-            throw new IllegalArgumentException("slice overflows the declared size");
+            return session.buffer;
         }
-        buf.readBytes(session.buffer, session.filled, available);
-        session.filled += available;
-
-        if (session.filled < session.buffer.length) {
-            return null;
-        }
-        SESSIONS.remove(key);
-        return session.buffer;
     }
 
     /**

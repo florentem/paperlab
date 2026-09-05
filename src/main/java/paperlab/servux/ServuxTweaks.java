@@ -91,8 +91,17 @@ public final class ServuxTweaks implements PluginMessageListener {
             switch (type) {
                 case C2S_METADATA_REQUEST -> onRegister(player);
                 case C2S_UNREGISTER_REPLY -> REGISTERED.remove(player.getUniqueId());
-                case C2S_BLOCK_ENTITY_REQUEST -> onBlockRequest(player, buf.readBlockPos());
-                case C2S_ENTITY_REQUEST -> onEntityRequest(player, buf.readVarInt());
+                case C2S_BLOCK_ENTITY_REQUEST -> {
+                    if (buf.readableBytes() > 8) {
+                        buf.readVarInt();
+                    }
+                    onBlockRequest(player, buf.readBlockPos());
+                }
+                case C2S_ENTITY_REQUEST -> {
+                    final int first = buf.readVarInt();
+                    final int entityId = buf.isReadable() ? buf.readVarInt() : first;
+                    onEntityRequest(player, entityId);
+                }
                 default -> {
                 }
             }

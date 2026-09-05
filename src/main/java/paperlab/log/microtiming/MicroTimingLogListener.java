@@ -114,6 +114,7 @@ public final class MicroTimingLogListener implements Listener {
     @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
     public void onPlayerInteract(final PlayerInteractEvent event) {
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK || event.getClickedBlock() == null) return;
+        if (event.getHand() != org.bukkit.inventory.EquipmentSlot.HAND) return;
         final ItemStack item = event.getItem();
         if (item == null || !item.getType().name().endsWith("_DYE")) return;
         final Player player = event.getPlayer();

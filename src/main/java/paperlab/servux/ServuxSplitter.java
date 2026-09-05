@@ -60,6 +60,7 @@ public final class ServuxSplitter {
 
             final byte[] slice = new byte[buf.readableBytes()];
             buf.readBytes(slice);
+            buf.release();
             connection.send(new ClientboundCustomPayloadPacket(new DiscardedPayload(id, slice)));
         }
     }

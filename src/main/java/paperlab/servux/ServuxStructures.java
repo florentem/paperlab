@@ -263,6 +263,7 @@ public final class ServuxStructures implements PluginMessageListener {
         buf.writeNbt(tag);
         final byte[] out = new byte[buf.readableBytes()];
         buf.readBytes(out);
+        buf.release();
         return out;
     }
 

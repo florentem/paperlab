@@ -52,10 +52,10 @@ public final class LabCounters {
         }
     }
 
-    private static final Map<Key, LabCounter> COUNTERS = new LinkedHashMap<>();
+    private static final Map<Key, LabCounter> COUNTERS = new java.util.concurrent.ConcurrentHashMap<>();
 
     /** Отслеживаемые воронки: местоположение → цвет шерсти, в которую она смотрит. */
-    private static final Map<BlockPosKey, DyeColor> TRACKED = new LinkedHashMap<>();
+    private static final Map<BlockPosKey, DyeColor> TRACKED = new java.util.concurrent.ConcurrentHashMap<>();
 
     private LabCounters() {
     }
@@ -148,7 +148,7 @@ public final class LabCounters {
                 hopper.update();
             }
         }
-        TRACKED.keySet().removeAll(stale);
+        stale.forEach(TRACKED::remove);
     }
 
     public static LabCounter of(final World world, final DyeColor colour) {
