@@ -19,7 +19,7 @@ repositories {
 //
 // Побочный эффект: плагин привязан к конкретной сборке сервера. Для стенда это
 // приемлемо, для распространения — нет.
-val forkLibs = file("../../fork/paper-lab")
+val forkLibs = if (file("../paperlab-core").exists()) file("../paperlab-core") else file("../../fork/paper-lab")
 
 dependencies {
     // paper-api из репозитория — ради транзитивных adventure, brigadier, netty и аннотаций.

@@ -43,6 +43,7 @@ public final class LabCommands {
         new Entry("ghost", LabMiscCommands.GHOST_HELP),
         new Entry("spawn", LabMiscCommands.SPAWN_HELP),
         new Entry("chunks", LabMiscCommands.CHUNKS_HELP),
+        new Entry("cplay", paperlab.cplay.command.CPlayCommands.CPLAY_HELP),
         new Entry("perms", "permission list and which ones you have"));
 
     /** Команды Carpet. Они отдельные; здесь только для справки в подсказке. */
@@ -50,6 +51,8 @@ public final class LabCommands {
         new Entry("/log", LabLogCommand.HELP),
         new Entry("/counter", LabMiscCommands.COUNTER_HELP),
         new Entry("/player", "bots: spawn, actions, kill"),
+        new Entry("/playback", paperlab.cplay.command.CPlayCommands.PLAYBACK_HELP),
+        new Entry("/capture", paperlab.cplay.command.CPlayCommands.CAPTURE_HELP),
         new Entry("/tick toggle", LabMiscCommands.TICK_HELP),
         new Entry("/perimeterinfo", LabInfoCommands.PERIMETER_HELP),
         new Entry("/info block", LabInfoCommands.INFO_HELP),
@@ -69,6 +72,7 @@ public final class LabCommands {
                 .then(LabMiscCommands.ghostNode("ghost"))
                 .then(LabMiscCommands.spawnNode("spawn"))
                 .then(LabMiscCommands.chunksNode("chunks"))
+                .then(paperlab.cplay.command.CPlayCommands.cplayNode("cplay"))
                 .then(Commands.literal("perms").executes(ctx -> perms(ctx.getSource())));
             // Правила — то, ради чего /carpet и существует в самом моде.
             RuleCommands.attach(carpet);
@@ -84,6 +88,14 @@ public final class LabCommands {
                 LabInfoCommands.INFO_HELP);
             registrar.register(LabInfoCommands.distanceNode("distance").build(),
                 LabInfoCommands.DISTANCE_HELP);
+
+            // Capture & Playback
+            registrar.register(paperlab.cplay.command.CPlayCommands.playbackNode("playback").build(),
+                paperlab.cplay.command.CPlayCommands.PLAYBACK_HELP);
+            registrar.register(paperlab.cplay.command.CPlayCommands.captureNode("capture").build(),
+                paperlab.cplay.command.CPlayCommands.CAPTURE_HELP);
+            registrar.register(paperlab.cplay.command.CPlayCommands.cplayNode("cplay").build(),
+                paperlab.cplay.command.CPlayCommands.CPLAY_HELP);
 
             // Наши — ещё и верхним уровнем, чтобы писать напрямую. Имя chunks наверху
             // занято ванилью, поэтому там префикс.

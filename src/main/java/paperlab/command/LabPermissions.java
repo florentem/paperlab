@@ -90,6 +90,12 @@ public final class LabPermissions {
     public static final String TICK = "paperlab.tick";
     public static final String PLAYER = "paperlab.player";
 
+    // --- Capture & Playback ---
+    public static final String CPLAY = "paperlab.cplay";
+    public static final String CPLAY_PLAYBACK = "paperlab.cplay.playback";
+    public static final String CPLAY_CAPTURE = "paperlab.cplay.capture";
+    public static final String CPLAY_MANAGE = "paperlab.cplay.manage";
+
     /**
      * Право сохранять значение правила между перезапусками.
      *
@@ -126,6 +132,10 @@ public final class LabPermissions {
         NODES.put(GHOST_OTHER, "observer mode for another player or bot");
         NODES.put(TICK, "tick freeze, step and warp");
         NODES.put(PLAYER, "bots: create, act, remove");
+        NODES.put(CPLAY, "Capture & Playback mod integration and asset access");
+        NODES.put(CPLAY_PLAYBACK, "playback redstone captures into the world");
+        NODES.put(CPLAY_CAPTURE, "capture redstone signals into assets");
+        NODES.put(CPLAY_MANAGE, "manage all Capture & Playback assets");
         NODES.put(RULE_DEFAULT, "persist rule values across restarts");
         // По праву на каждое правило: правила меняют поведение мира, и раздавать их
         // скопом нельзя — кому-то нужен только fillUpdates и ничего больше.

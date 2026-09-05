@@ -69,6 +69,7 @@ public final class PaperLabPlugin extends JavaPlugin implements Listener {
         paperlab.servux.ServuxStructures.enable(this);
         paperlab.servux.ServuxLitematica.enable(this);
         paperlab.servux.ServuxEntities.enable(this);
+        paperlab.cplay.CPlayService.enable(this);
 
         // Один общий тик: счётчики каждый тик, HUD раз в секунду (решает сам LabHud).
         Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> {
@@ -80,6 +81,7 @@ public final class PaperLabPlugin extends JavaPlugin implements Listener {
         }, 1L, 1L);
 
         this.getLogger().info("PaperLab enabled - " + CoreBridge.describe());
+        this.getLogger().info("PaperLab CPlay - " + paperlab.core.CPlayBridge.describe());
     }
 
     @Override
@@ -89,6 +91,7 @@ public final class PaperLabPlugin extends JavaPlugin implements Listener {
         paperlab.servux.ServuxStructures.disable();
         paperlab.servux.ServuxLitematica.disable();
         paperlab.servux.ServuxEntities.disable();
+        paperlab.cplay.CPlayService.disable();
         LabGhost.restoreAll();
         // Правила меняют поведение мира: снимать их обязательно, иначе выключенный
         // плагин оставит после себя изменённый сервер.
@@ -106,6 +109,7 @@ public final class PaperLabPlugin extends JavaPlugin implements Listener {
     @EventHandler
     public void onJoin(final org.bukkit.event.player.PlayerJoinEvent event) {
         ChunkMapService.onJoin(event.getPlayer());
+        paperlab.cplay.CPlayService.onJoin(event.getPlayer());
         LabGhost.hideGhostsFrom(event.getPlayer());
     }
 
@@ -117,6 +121,7 @@ public final class PaperLabPlugin extends JavaPlugin implements Listener {
         paperlab.servux.ServuxStructures.onQuit(event.getPlayer());
         paperlab.servux.ServuxLitematica.onQuit(event.getPlayer());
         paperlab.servux.ServuxEntities.onQuit(event.getPlayer());
+        paperlab.cplay.CPlayService.onQuit(event.getPlayer());
         LabGhost.onDisconnect(event.getPlayer());
     }
 }
