@@ -60,6 +60,11 @@ public final class PaperLabPlugin extends JavaPlugin implements Listener {
         Bukkit.getPluginManager().registerEvents(this, this);
         Bukkit.getPluginManager().registerEvents(new LabCounters.Listener(), this);
         Bukkit.getPluginManager().registerEvents(new paperlab.rules.TntAngleListener(), this);
+        Bukkit.getPluginManager().registerEvents(new paperlab.log.item.ItemLogListener(), this);
+        paperlab.log.movement.MovementLogListener.init();
+        Bukkit.getPluginManager().registerEvents(new paperlab.log.movement.MovementLogListener(), this);
+        paperlab.log.microtiming.MicroTimingLogListener.init();
+        Bukkit.getPluginManager().registerEvents(new paperlab.log.microtiming.MicroTimingLogListener(), this);
         if (!CoreBridge.PRESENT) {
             // Урезанная трасса спавна нужна только там, где нет полной из ядра.
             Bukkit.getPluginManager().registerEvents(new paperlab.spawn.SpawnCounters(), this);
@@ -75,6 +80,7 @@ public final class PaperLabPlugin extends JavaPlugin implements Listener {
         Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> {
             LabCounters.tick();
             LabHud.tick();
+            paperlab.log.microtiming.MicroTimingLogger.flushTick();
             ChunkMapService.tick();
             paperlab.servux.ServuxHud.tick();
             paperlab.servux.ServuxStructures.tick();

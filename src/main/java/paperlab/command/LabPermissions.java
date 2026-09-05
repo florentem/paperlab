@@ -32,6 +32,9 @@ public final class LabPermissions {
     public static final String LOG_MOBCAPS = "paperlab.log.mobcaps";
     public static final String LOG_COUNTER = "paperlab.log.counter";
     public static final String LOG_SPAWN = "paperlab.log.spawn";
+    public static final String LOG_ITEM = "paperlab.log.item";
+    public static final String LOG_MICROTIMING = "paperlab.log.microtiming";
+    public static final String LOG_MOVEMENT = "paperlab.log.movement";
     public static final String CHUNKS = "paperlab.chunks";
     public static final String CHUNKMAP = "paperlab.chunkmap";
     public static final String SPAWN = "paperlab.spawn";
@@ -114,6 +117,9 @@ public final class LabPermissions {
         NODES.put(LOG_MOBCAPS, "local mobcap subscription, including other players");
         NODES.put(LOG_COUNTER, "hopper counter subscription");
         NODES.put(LOG_SPAWN, "spawn trace subscription");
+        NODES.put(LOG_ITEM, "item lifecycle: created, despawned, died");
+        NODES.put(LOG_MICROTIMING, "redstone components microtiming: merged, all, unique");
+        NODES.put(LOG_MOVEMENT, "entity movement calculation breakdown");
         NODES.put(CHUNKS, "chunk status summary around a player");
         NODES.put(CHUNKMAP, "chunk map for the ChunkDebug client mod");
         NODES.put(SPAWN, "spawn trace: view and control collection");

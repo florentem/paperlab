@@ -132,6 +132,27 @@ public final class LabRules {
             // но до первого тика скорость ещё никто не читал.
         }));
 
+    /**
+     * Включение сбора и вывода микротаймингов редстоуна (/log microtiming).
+     *
+     * <p>Как в Carpet-TIS-Addition, правило microTiming активирует трекеры для
+     * компонентов, помеченных шерстью или маркерами красителей.
+     */
+    public static final LabRule<Boolean> MICRO_TIMING = register(new LabRule<>(
+        "microTiming",
+        "enable redstone components microtiming logger",
+        "log actions and updates of blocks marked with wool or dye",
+        Boolean.FALSE,
+        List.of("false", "true"),
+        BOOLEAN,
+        PLAIN::apply,
+        value -> null,
+        value -> {
+            if (CoreBridge.PRESENT) {
+                io.papermc.paper.lab.microtiming.LabMicroTiming.enabled = value;
+            }
+        }));
+
     private LabRules() {
     }
 
@@ -156,7 +177,7 @@ public final class LabRules {
      * чем отсутствующее.
      */
     public static boolean available(final LabRule<?> rule) {
-        if (rule == HARDCODE_TNT_ANGLE) {
+        if (rule == HARDCODE_TNT_ANGLE || rule == MICRO_TIMING) {
             return true;
         }
         return CoreBridge.PRESENT;

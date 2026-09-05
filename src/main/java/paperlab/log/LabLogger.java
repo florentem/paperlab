@@ -27,15 +27,24 @@ public final class LabLogger {
 
     private final String name;
     private final List<String> options;
+    private final String defaultOption;
     /** Опция задаётся свободным текстом (ником) и по списку не проверяется. */
     private final boolean freeform;
 
     /** ник подписчика → упорядоченный набор его опций. */
     private final Map<String, LinkedHashSet<String>> subscribers = new LinkedHashMap<>();
 
+    LabLogger(final String name, final boolean freeform, final String defaultOption, final List<String> options) {
+        this.name = name;
+        this.freeform = freeform;
+        this.defaultOption = defaultOption;
+        this.options = List.copyOf(options);
+    }
+
     LabLogger(final String name, final boolean freeform, final String... options) {
         this.name = name;
         this.freeform = freeform;
+        this.defaultOption = "";
         this.options = List.of(options);
     }
 
@@ -47,12 +56,20 @@ public final class LabLogger {
         return this.options;
     }
 
+    public String defaultOption() {
+        return this.defaultOption;
+    }
+
     public boolean freeform() {
         return this.freeform;
     }
 
     public boolean hasSubscribers() {
         return !this.subscribers.isEmpty();
+    }
+
+    public Map<String, LinkedHashSet<String>> subscribers() {
+        return java.util.Collections.unmodifiableMap(this.subscribers);
     }
 
     /** Все опции игрока в порядке подписки. Пустая коллекция — не подписан. */
@@ -77,7 +94,10 @@ public final class LabLogger {
      * @return {@code true}, если после вызова подписка на эту цель есть
      */
     public boolean toggle(final String playerName, final @Nullable String option) {
-        final String normalized = option == null ? "" : option.trim();
+        String normalized = option == null ? "" : option.trim();
+        if (normalized.isEmpty() && !this.defaultOption.isEmpty()) {
+            normalized = this.defaultOption;
+        }
         final String target = targetOf(normalized);
 
         final LinkedHashSet<String> set =

@@ -2,6 +2,7 @@ package paperlab.log;
 
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.jetbrains.annotations.Nullable;
 
@@ -34,6 +35,30 @@ public final class LabLoggers {
      */
     public static final LabLogger SPAWN = register(new LabLogger("spawn", true));
 
+    /**
+     * Жизненный цикл сущностей предметов: создание, деспавн через 5 минут, уничтожение уроном.
+     *
+     * <p>Опции: {@code despawn}, {@code die}, {@code create}, или через запятую.
+     */
+    public static final LabLogger ITEM = register(new LabLogger("item", false, "despawn",
+        List.of("despawn", "die", "create", "despawn,die", "despawn,die,create")));
+
+    /**
+     * Микротайминг компонентов редстоуна и событий блоков.
+     *
+     * <p>Опции: {@code merged}, {@code all}, {@code unique}.
+     */
+    public static final LabLogger MICROTIMING = register(new LabLogger("microtiming", false, "merged",
+        List.of("merged", "all", "unique")));
+
+    /**
+     * Анализ этапов расчета движения сущностей (move): ограничение поршнями, сник, коллизии.
+     *
+     * <p>Опция — селектор цели (например {@code non_zero:@a[distance=..10]}, {@code @s}).
+     */
+    public static final LabLogger MOVEMENT = register(new LabLogger("movement", true, "non_zero:@a[distance=..10]",
+        List.of("non_zero:@a[distance=..10]", "@s", "non_zero:@e[type=creeper,distance=..5]")));
+
     private LabLoggers() {
     }
 
@@ -43,7 +68,7 @@ public final class LabLoggers {
     }
 
     public static @Nullable LabLogger get(final String name) {
-        return LOGGERS.get(name);
+        return LOGGERS.get(name.toLowerCase(java.util.Locale.ROOT));
     }
 
     public static Collection<LabLogger> all() {
@@ -81,6 +106,15 @@ public final class LabLoggers {
         }
         if (logger == SPAWN) {
             return paperlab.command.LabPermissions.LOG_SPAWN;
+        }
+        if (logger == ITEM) {
+            return paperlab.command.LabPermissions.LOG_ITEM;
+        }
+        if (logger == MICROTIMING) {
+            return paperlab.command.LabPermissions.LOG_MICROTIMING;
+        }
+        if (logger == MOVEMENT) {
+            return paperlab.command.LabPermissions.LOG_MOVEMENT;
         }
         return paperlab.command.LabPermissions.LOG;
     }
