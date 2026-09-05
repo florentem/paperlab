@@ -13,3 +13,6 @@ dependencies:
     LitematicaFolia:
       load: BEFORE
       required: false
+    TAB:
+      load: BEFORE
+      required: false

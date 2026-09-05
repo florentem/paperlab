@@ -1,6 +1,7 @@
 package paperlab;
 
 import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -102,6 +103,9 @@ public final class PaperLabPlugin extends JavaPlugin implements Listener {
         paperlab.servux.ServuxTweaks.disable();
         paperlab.cplay.CPlayService.disable();
         LabGhost.restoreAll();
+        for (final Player player : Bukkit.getOnlinePlayers()) {
+            paperlab.log.LabHud.clear(player);
+        }
         // Правила меняют поведение мира: снимать их обязательно, иначе выключенный
         // плагин оставит после себя изменённый сервер.
         paperlab.rules.LabRules.resetAll();

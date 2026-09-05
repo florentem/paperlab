@@ -3,7 +3,7 @@ plugins {
 }
 
 group = "paperlab"
-version = "1.0.2"
+version = "1.0.3"
 
 repositories {
     mavenCentral()
@@ -49,6 +49,7 @@ dependencies {
     testImplementation("com.mojang:authlib:7.0.63")
     testImplementation("it.unimi.dsi:fastutil:8.5.15")
     testImplementation("io.leangen.geantyref:geantyref:1.3.15")
+    testImplementation("net.kyori:adventure-text-serializer-ansi:5.2.0")
 }
 
 java {
