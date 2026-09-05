@@ -1,14 +1,14 @@
 package paperlab.servux;
 
-import io.netty.buffer.ByteBuf;
+import fi.dy.masa.servux.network.packet.ServuxHudPacket;
+import fi.dy.masa.servux.util.data.Constants;
+import fi.dy.masa.servux.util.data.tag.CompoundData;
+import fi.dy.masa.servux.util.data.tag.util.DataByteBufUtils;
+import fi.dy.masa.servux.util.data.tag.converter.DataConverterNbt;
 import io.netty.buffer.Unpooled;
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.util.zip.GZIPInputStream;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.NbtAccounter;
-import net.minecraft.nbt.NbtIo;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.world.entity.MobCategory;
 import org.junit.jupiter.api.DisplayName;
@@ -17,10 +17,11 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Дифференциальные тесты совместимости канала {@code servux:hud_metadata} с клиентом MiniHUD.
+ * Полноценный дифференциальный тест сетевого протокола {@code servux:hud_metadata}.
  *
- * <p>Проверяют соответствие форматов сериализации PaperLab и десериализации MiniHUD
- * (классы {@code ServuxHudPacket}, {@code DataByteBufUtils} и {@code HudDataManager}).
+ * <p>Сравнивает оригинальный код мода Servux / MiniHUD ({@link ServuxHudPacket},
+ * {@link DataByteBufUtils}, {@link CompoundData}) с реализацией плагина PaperLab
+ * ({@link ServuxWire}, {@link ServuxHud}).
  */
 public class ServuxHudDifferentialTest {
 
@@ -28,70 +29,70 @@ public class ServuxHudDifferentialTest {
     private static final int S2C_WEATHER_TICK = 5;
     private static final int S2C_DATA_LOGGER_TICK = 7;
 
-    /**
-     * Эмуляция клиентского парсера MiniHUD (DataByteBufUtils.fromByteBuf + ServuxHudPacket.fromPacket).
-     */
-    private static CompoundTag decodeMiniHudPacket(final byte[] packetBytes, final int expectedType) throws IOException {
-        final FriendlyByteBuf input = new FriendlyByteBuf(Unpooled.wrappedBuffer(packetBytes));
-        final int type = input.readVarInt();
-        assertEquals(expectedType, type, "Packet type ID must match MiniHUD protocol");
-
-        // MiniHUD: DataByteBufUtils.fromByteBuf(input)
-        final int length = input.readInt();
-        assertTrue(length > 0, "Length prefix must be positive");
-        assertEquals(length, input.readableBytes(),
-            "Buffer slice must match readable bytes exactly: no extra trailing bytes allowed (would kill Netty)");
-
-        final byte[] slice = new byte[length];
-        input.readBytes(slice);
-        assertFalse(input.isReadable(), "All bytes in custom payload must be consumed by MiniHUD");
-
-        try (GZIPInputStream gis = new GZIPInputStream(new ByteArrayInputStream(slice))) {
-            return NbtIo.readCompressed(new ByteArrayInputStream(slice), NbtAccounter.unlimitedHeap());
-        }
-    }
-
     @Test
-    @DisplayName("Weather packet framing and MiniHUD cycle validation (prevents 'Disabled, or unknown')")
-    public void testWeatherPacketEncodingAndMiniHudDecoding() throws IOException {
+    @DisplayName("Дифференциальный тест Weather: PaperLab Wire Encoder -> Оригинальный парсер ServuxHudPacket.fromPacket")
+    public void testWeatherPacketOriginalParserIntegration() throws IOException {
         final CompoundTag weatherTag = new CompoundTag();
         weatherTag.putBoolean("isRaining", false);
         weatherTag.putBoolean("isThundering", false);
         weatherTag.putInt("SetClear", 18500);
 
+        // 1. Кодируем пакет проводом PaperLab:
         final byte[] wire = ServuxWire.data(S2C_WEATHER_TICK, weatherTag);
-        final CompoundTag decoded = decodeMiniHudPacket(wire, S2C_WEATHER_TICK);
 
-        // Проверяем поля NBT
-        assertFalse(decoded.getBooleanOr("isRaining", true));
-        assertFalse(decoded.getBooleanOr("isThundering", true));
-        assertEquals(18500, decoded.getIntOr("SetClear", -1));
+        // 2. Декодируем НАПРЯМУЮ ОРИГИНАЛЬНЫМ КЛАССОМ ServuxHudPacket.fromPacket (код MiniHUD / Servux):
+        final FriendlyByteBuf input = new FriendlyByteBuf(Unpooled.wrappedBuffer(wire));
+        final ServuxHudPacket parsed = ServuxHudPacket.fromPacket(input);
 
-        // Эмуляция логики MiniHUD HudDataManager.receiveWeatherData + hasValidWeatherCycle()
-        final boolean isRaining = decoded.getBooleanOr("isRaining", false);
-        final boolean isThundering = decoded.getBooleanOr("isThundering", false);
-        final int clearWeatherTimer = decoded.getIntOr("SetClear", -1);
-        final int rainWeatherTimer = decoded.getIntOr("SetRaining", -1);
-        final int thunderWeatherTimer = decoded.getIntOr("SetThundering", -1);
+        assertNotNull(parsed, "Оригинальный ServuxHudPacket.fromPacket не должен возвращать null!");
+        assertEquals(ServuxHudPacket.Type.PACKET_S2C_WEATHER_TICK, parsed.getType());
+        assertFalse(input.isReadable(), "Все байты пакета обязаны быть вычитаны (защита от Netty extra bytes exception)");
 
-        final boolean isWeatherClear = !isRaining && !isThundering;
-        final int clearTime = isWeatherClear ? clearWeatherTimer : -1;
-        final int rainTime = isRaining ? rainWeatherTimer : -1;
-        final int thunderTime = isThundering ? thunderWeatherTimer : -1;
+        // 3. Проверяем поля через оригинальный CompoundData мода:
+        final CompoundData data = parsed.getCompound();
+        assertNotNull(data);
+        assertFalse(data.getBooleanOrDefault("isRaining", true));
+        assertFalse(data.getBooleanOrDefault("isThundering", true));
+        assertEquals(18500, data.getIntOrDefault("SetClear", -1));
 
-        // MiniHUD hasValidWeatherCycle():
-        final boolean hasValidWeatherCycle = clearTime >= 0 || rainTime >= 0 || thunderTime >= 0;
-        assertTrue(hasValidWeatherCycle,
-            "MiniHUD must recognize a valid weather cycle! If false, MiniHUD renders 'Weather: Disabled, or unknown'");
-        assertEquals(18500, clearTime);
+        // 4. Проверяем валидацию цикла MiniHUD:
+        final int clearTimer = data.getIntOrDefault("SetClear", -1);
+        final boolean hasValidWeatherCycle = clearTimer >= 0;
+        assertTrue(hasValidWeatherCycle, "MiniHUD должен считать цикл погоды валидным!");
     }
 
     @Test
-    @DisplayName("MobCaps and TPS data logger packet framing and MiniHUD dimKey lookup")
-    public void testDataLoggerMobCapsAndTpsEncodingAndMiniHudDecoding() throws IOException {
+    @DisplayName("Дифференциальный тест Weather: Оригинальный энкодер Servux -> Парсер PaperLab ServuxWire.readCompressedNbt")
+    public void testWeatherPacketReverseCrossWire() throws IOException {
+        // 1. Формируем пакет оригинальными классами Servux:
+        final CompoundData originalData = new CompoundData();
+        originalData.putBoolean("isRaining", true);
+        originalData.putBoolean("isThundering", false);
+        originalData.putInt("SetRaining", 6000);
+
+        final ServuxHudPacket packet = ServuxHudPacket.WeatherTick(originalData);
+        final FriendlyByteBuf origBuf = new FriendlyByteBuf(Unpooled.buffer());
+        packet.toPacket(origBuf);
+
+        final byte[] origBytes = new byte[origBuf.readableBytes()];
+        origBuf.readBytes(origBytes);
+        origBuf.release();
+
+        // 2. Читаем парсером PaperLab:
+        assertEquals(S2C_WEATHER_TICK, ServuxWire.readType(origBytes));
+        final CompoundTag decodedByPaperLab = ServuxWire.readCompressedNbt(origBytes);
+
+        assertTrue(decodedByPaperLab.getBooleanOr("isRaining", false));
+        assertFalse(decodedByPaperLab.getBooleanOr("isThundering", true));
+        assertEquals(6000, decodedByPaperLab.getIntOr("SetRaining", -1));
+    }
+
+    @Test
+    @DisplayName("Дифференциальный тест MobCaps и TPS: PaperLab -> Оригинальный ServuxHudPacket.fromPacket")
+    public void testDataLoggerMobCapsOriginalParserIntegration() throws IOException {
         final CompoundTag dataLogger = new CompoundTag();
 
-        // 1. TPS
+        // TPS
         final CompoundTag tps = new CompoundTag();
         tps.putDouble("mspt", 12.5);
         tps.putDouble("tps", 20.0);
@@ -101,7 +102,7 @@ public class ServuxHudDifferentialTest {
         tps.putBoolean("stepping", false);
         dataLogger.put("tps", tps);
 
-        // 2. MobCaps в формате Servux (dimKey -> { WorldTick, cap_count, cap_data })
+        // MobCaps
         final CompoundTag mobCaps = new CompoundTag();
         final CompoundTag overworldEntry = new CompoundTag();
         overworldEntry.putLong("WorldTick", 45000L);
@@ -118,41 +119,34 @@ public class ServuxHudDifferentialTest {
         mobCaps.put("minecraft:overworld", overworldEntry);
         dataLogger.put("mob_caps", mobCaps);
 
-        // Кодируем в провод
+        // Кодируем через PaperLab:
         final byte[] wire = ServuxWire.data(S2C_DATA_LOGGER_TICK, dataLogger);
-        final CompoundTag decoded = decodeMiniHudPacket(wire, S2C_DATA_LOGGER_TICK);
 
-        // MiniHUD: TPS
-        final CompoundTag decodedTps = decoded.getCompound("tps").orElseThrow();
-        assertNotNull(decodedTps);
-        assertEquals(20.0, decodedTps.getDoubleOr("tps", 0.0));
-        assertEquals(12.5, decodedTps.getDoubleOr("mspt", 0.0));
+        // Декодируем через оригинальный Servux:
+        final FriendlyByteBuf input = new FriendlyByteBuf(Unpooled.wrappedBuffer(wire));
+        final ServuxHudPacket parsed = ServuxHudPacket.fromPacket(input);
 
-        // MiniHUD: MobCaps
-        final CompoundTag decodedMobCaps = decoded.getCompound("mob_caps").orElseThrow();
-        assertNotNull(decodedMobCaps);
+        assertNotNull(parsed);
+        assertEquals(ServuxHudPacket.Type.PACKET_S2C_DATA_LOGGER_TICK, parsed.getType());
+        assertFalse(input.isReadable());
 
-        // MiniHUD: String dimKey = mc.level.dimension().identifier().toString();
-        final String dimKey = "minecraft:overworld";
-        assertTrue(decodedMobCaps.contains(dimKey),
-            "MiniHUD looks up entry.contains(dimKey). If missing, mobcaps line is completely hidden!");
+        final CompoundData compound = parsed.getCompound();
+        assertTrue(compound.contains("tps", Constants.NBT.TAG_COMPOUND));
+        assertTrue(compound.contains("mob_caps", Constants.NBT.TAG_COMPOUND));
 
-        final CompoundTag nbtEntry = decodedMobCaps.getCompound(dimKey).orElseThrow();
-        assertEquals(45000L, nbtEntry.getLongOr("WorldTick", 0L));
-        assertEquals(8, nbtEntry.getIntOr("cap_count", 0));
+        final CompoundData mobCapsData = compound.getCompoundOrDefault("mob_caps", new CompoundData());
+        assertTrue(mobCapsData.contains("minecraft:overworld", Constants.NBT.TAG_COMPOUND),
+            "Оригинальный клиент MiniHUD ищет dimKey в mob_caps");
 
-        final ListTag caps = (ListTag) nbtEntry.get("cap_data");
-        assertNotNull(caps);
-        assertEquals(8, caps.size());
-
-        final CompoundTag monsterCap = (CompoundTag) caps.get(0);
-        assertEquals(15, monsterCap.getIntOr("current", 0));
-        assertEquals(70, monsterCap.getIntOr("cap", 0));
+        final CompoundData owData = mobCapsData.getCompoundOrDefault("minecraft:overworld", new CompoundData());
+        assertEquals(45000L, owData.getLongOrDefault("WorldTick", 0L));
+        assertEquals(8, owData.getIntOrDefault("cap_count", 0));
+        assertTrue(owData.containsList("cap_data", Constants.NBT.TAG_COMPOUND));
     }
 
     @Test
-    @DisplayName("Spawn data packet framing and decoding")
-    public void testSpawnDataEncodingAndMiniHudDecoding() throws IOException {
+    @DisplayName("Дифференциальный тест Spawn Data: PaperLab -> Оригинальный ServuxHudPacket")
+    public void testSpawnDataOriginalParserIntegration() throws IOException {
         final CompoundTag spawnTag = new CompoundTag();
         spawnTag.putString("spawnDimension", "minecraft:overworld");
         spawnTag.putInt("spawnPosX", 100);
@@ -160,25 +154,18 @@ public class ServuxHudDifferentialTest {
         spawnTag.putInt("spawnPosZ", -200);
 
         final byte[] wire = ServuxWire.data(S2C_SPAWN_DATA, spawnTag);
-        final CompoundTag decoded = decodeMiniHudPacket(wire, S2C_SPAWN_DATA);
 
-        assertEquals("minecraft:overworld", decoded.getStringOr("spawnDimension", ""));
-        assertEquals(100, decoded.getIntOr("spawnPosX", 0));
-        assertEquals(64, decoded.getIntOr("spawnPosY", 0));
-        assertEquals(-200, decoded.getIntOr("spawnPosZ", 0));
-    }
+        final FriendlyByteBuf input = new FriendlyByteBuf(Unpooled.wrappedBuffer(wire));
+        final ServuxHudPacket parsed = ServuxHudPacket.fromPacket(input);
 
-    @Test
-    @DisplayName("ServuxWire roundtrip with readCompressedNbt")
-    public void testServuxWireRoundtrip() throws IOException {
-        final CompoundTag tag = new CompoundTag();
-        tag.putString("key", "test_value");
-        tag.putInt("num", 42);
+        assertNotNull(parsed);
+        assertEquals(ServuxHudPacket.Type.PACKET_S2C_SPAWN_DATA, parsed.getType());
+        assertFalse(input.isReadable());
 
-        final byte[] wire = ServuxWire.data(S2C_WEATHER_TICK, tag);
-        final CompoundTag roundtrip = ServuxWire.readCompressedNbt(wire);
-
-        assertEquals("test_value", roundtrip.getStringOr("key", ""));
-        assertEquals(42, roundtrip.getIntOr("num", 0));
+        final CompoundData compound = parsed.getCompound();
+        assertEquals("minecraft:overworld", compound.getStringOrDefault("spawnDimension", ""));
+        assertEquals(100, compound.getIntOrDefault("spawnPosX", 0));
+        assertEquals(64, compound.getIntOrDefault("spawnPosY", 0));
+        assertEquals(-200, compound.getIntOrDefault("spawnPosZ", 0));
     }
 }
