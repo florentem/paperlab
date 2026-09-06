@@ -100,6 +100,9 @@ public final class LabPermissions {
     public static final String GHOST = "paperlab.ghost";
     public static final String GHOST_OTHER = "paperlab.ghost.other";
     public static final String TICK = "paperlab.tick";
+    public static final String TICK_GLOBAL = "paperlab.tick.global";
+    public static final String TICK_ZONE = "paperlab.tick.zone";
+    public static final String TICK_ZONE_ADMIN = "paperlab.tick.zone.admin";
     public static final String PLAYER = "paperlab.player";
 
     // --- Capture & Playback ---
@@ -115,6 +118,7 @@ public final class LabPermissions {
     public static final String RULE_ALL = "paperlab.rule.*";
     public static final String COUNTER_ALL = "paperlab.counter.*";
     public static final String GHOST_ALL = "paperlab.ghost.*";
+    public static final String TICK_ALL = "paperlab.tick.*";
 
     /**
      * Permission to persist a rule value across restarts.
@@ -159,6 +163,9 @@ public final class LabPermissions {
         NODES.put(GHOST, "observer mode for yourself");
         NODES.put(GHOST_OTHER, "observer mode for another player or bot");
         NODES.put(TICK, "tick freeze, step and warp");
+        NODES.put(TICK_GLOBAL, "manage global tick rate and freeze without zone focus");
+        NODES.put(TICK_ZONE, "manage focused tick zones and zone commands");
+        NODES.put(TICK_ZONE_ADMIN, "modify any zone, bypass zone ownership/membership");
         NODES.put(PLAYER, "bots: create, act, remove");
         NODES.put(CPLAY, "Capture & Playback mod integration and asset access");
         NODES.put(CPLAY_PLAYBACK, "playback redstone captures into the world");
@@ -177,6 +184,7 @@ public final class LabPermissions {
         GROUPS.put(RULE_ALL, "all /carpet rules and persistence");
         GROUPS.put(COUNTER_ALL, "all hopper counter commands and edit permissions");
         GROUPS.put(GHOST_ALL, "observer mode for self and other players/bots");
+        GROUPS.put(TICK_ALL, "all tick manipulation permissions (global and zones)");
     }
 
     private LabPermissions() {
@@ -214,6 +222,9 @@ public final class LabPermissions {
 
         registerGroup(GHOST_ALL, GROUPS.get(GHOST_ALL), rootChildren,
             GHOST, GHOST_OTHER);
+
+        registerGroup(TICK_ALL, GROUPS.get(TICK_ALL), rootChildren,
+            TICK, TICK_GLOBAL, TICK_ZONE, TICK_ZONE_ADMIN);
 
         final Map<String, Boolean> ruleChildren = new LinkedHashMap<>();
         ruleChildren.put(RULE_DEFAULT, Boolean.TRUE);

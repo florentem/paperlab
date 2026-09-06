@@ -37,9 +37,14 @@ public final class PaperLabPlugin extends JavaPlugin implements Listener {
     private static PaperLabPlugin instance;
 
     private paperlab.rules.RuleDefaults ruleDefaults;
+    private paperlab.zone.ZoneService zoneService;
 
     public static PaperLabPlugin get() {
         return instance;
+    }
+
+    public paperlab.zone.ZoneService zoneService() {
+        return this.zoneService;
     }
 
     @Override
@@ -55,9 +60,13 @@ public final class PaperLabPlugin extends JavaPlugin implements Listener {
         paperlab.rules.LabRules.applyDefaults(this.ruleDefaults, this.getLogger()::info);
         paperlab.rules.LabRules.applyAll();
 
+        this.zoneService = new paperlab.zone.ZoneService(this);
+        this.zoneService.enable();
+        paperlab.zone.ZoneCommands.attachToVanillaTick(this.zoneService);
+
         // Permissions are registered before commands: their requires already ask for these nodes.
         paperlab.command.LabPermissions.register();
-        LabCommands.register(this);
+        LabCommands.register(this, this.zoneService);
 
         Bukkit.getPluginManager().registerEvents(this, this);
         Bukkit.getPluginManager().registerEvents(new LabCounters.Listener(), this);
@@ -95,6 +104,10 @@ public final class PaperLabPlugin extends JavaPlugin implements Listener {
 
     @Override
     public void onDisable() {
+        if (this.zoneService != null) {
+            this.zoneService.disable();
+            this.zoneService = null;
+        }
         ChunkMapService.disable();
         paperlab.servux.ServuxHud.disable();
         paperlab.servux.ServuxStructures.disable();

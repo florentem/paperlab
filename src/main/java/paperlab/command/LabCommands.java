@@ -45,6 +45,7 @@ public final class LabCommands {
         new Entry("spawn", LabMiscCommands.SPAWN_HELP),
         new Entry("chunks", LabMiscCommands.CHUNKS_HELP),
         new Entry("cplay", paperlab.cplay.command.CPlayCommands.CPLAY_HELP),
+        new Entry("zone", paperlab.zone.ZoneCommands.HELP),
         new Entry("perms", "permission list and which ones you have"));
 
     /** Carpet's commands. They are separate; listed here only for the overview. */
@@ -55,6 +56,7 @@ public final class LabCommands {
         new Entry("/playback", paperlab.cplay.command.CPlayCommands.PLAYBACK_HELP),
         new Entry("/capture", paperlab.cplay.command.CPlayCommands.CAPTURE_HELP),
         new Entry("/tick toggle", LabMiscCommands.TICK_HELP),
+        new Entry("/tick zone", paperlab.zone.ZoneCommands.HELP),
         new Entry("/perimeterinfo", LabInfoCommands.PERIMETER_HELP),
         new Entry("/info block", LabInfoCommands.INFO_HELP),
         new Entry("/distance", LabInfoCommands.DISTANCE_HELP));
@@ -62,7 +64,7 @@ public final class LabCommands {
     private LabCommands() {
     }
 
-    public static void register(final JavaPlugin plugin) {
+    public static void register(final JavaPlugin plugin, final paperlab.zone.ZoneService zoneService) {
         final String version = plugin.getPluginMeta().getVersion();
         plugin.getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, event -> {
             final var registrar = event.registrar();
@@ -75,6 +77,7 @@ public final class LabCommands {
                 .then(LabMiscCommands.spawnNode("spawn"))
                 .then(LabMiscCommands.chunksNode("chunks"))
                 .then(paperlab.cplay.command.CPlayCommands.cplayNode("cplay"))
+                .then(paperlab.zone.ZoneCommands.paperZoneNode(zoneService, "zone"))
                 .then(Commands.literal("perms").executes(ctx -> perms(ctx.getSource())));
             // Rules — what /carpet exists for in the mod itself.
             RuleCommands.attach(carpet);
@@ -98,6 +101,10 @@ public final class LabCommands {
                 paperlab.cplay.command.CPlayCommands.CAPTURE_HELP);
             registrar.register(paperlab.cplay.command.CPlayCommands.cplayNode("cplay").build(),
                 paperlab.cplay.command.CPlayCommands.CPLAY_HELP);
+
+            // Tick Zones
+            registrar.register(paperlab.zone.ZoneCommands.paperZoneNode(zoneService, "zone").build(),
+                paperlab.zone.ZoneCommands.HELP);
 
             // Ours also at top level, so they can be typed directly. The name chunks is taken
             // by vanilla up there, hence the prefix.

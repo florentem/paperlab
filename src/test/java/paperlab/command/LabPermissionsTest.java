@@ -14,6 +14,7 @@ public class LabPermissionsTest {
         assertEquals("paperlab.rule.*", LabPermissions.RULE_ALL);
         assertEquals("paperlab.counter.*", LabPermissions.COUNTER_ALL);
         assertEquals("paperlab.ghost.*", LabPermissions.GHOST_ALL);
+        assertEquals("paperlab.tick.*", LabPermissions.TICK_ALL);
         assertEquals("paperlab.*", LabPermissions.ROOT);
 
         assertTrue(LabPermissions.groups().containsKey(LabPermissions.LOG_ALL));
@@ -22,6 +23,7 @@ public class LabPermissionsTest {
         assertTrue(LabPermissions.groups().containsKey(LabPermissions.RULE_ALL));
         assertTrue(LabPermissions.groups().containsKey(LabPermissions.COUNTER_ALL));
         assertTrue(LabPermissions.groups().containsKey(LabPermissions.GHOST_ALL));
+        assertTrue(LabPermissions.groups().containsKey(LabPermissions.TICK_ALL));
     }
 
     @Test
@@ -42,6 +44,11 @@ public class LabPermissionsTest {
         assertTrue(LabPermissions.nodes().containsKey(LabPermissions.CPLAY));
         assertTrue(LabPermissions.nodes().containsKey(LabPermissions.CPLAY_PLAYBACK));
         assertTrue(LabPermissions.nodes().containsKey(LabPermissions.CPLAY_MANAGE));
+
+        assertTrue(LabPermissions.nodes().containsKey(LabPermissions.TICK));
+        assertTrue(LabPermissions.nodes().containsKey(LabPermissions.TICK_GLOBAL));
+        assertTrue(LabPermissions.nodes().containsKey(LabPermissions.TICK_ZONE));
+        assertTrue(LabPermissions.nodes().containsKey(LabPermissions.TICK_ZONE_ADMIN));
 
         assertTrue(LabPermissions.nodes().containsKey(LabPermissions.RULE_DEFAULT));
         assertTrue(LabPermissions.nodes().containsKey("paperlab.rule.fillupdates"));
