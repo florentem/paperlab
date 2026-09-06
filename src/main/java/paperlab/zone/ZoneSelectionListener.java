@@ -36,7 +36,7 @@ public final class ZoneSelectionListener implements Listener {
         }
 
         // Only handle main hand interaction
-        if (event.getHand() != EquipmentSlot.HAND) {
+        if (event.getHand() == null || event.getHand() != EquipmentSlot.HAND) {
             return;
         }
 
@@ -76,12 +76,18 @@ public final class ZoneSelectionListener implements Listener {
 
     @EventHandler(priority = EventPriority.LOWEST)
     public void onQuit(final PlayerQuitEvent event) {
-        this.zoneService.cancelSelection(event.getPlayer(), false);
+        final Player player = event.getPlayer();
+        this.zoneService.cancelSelection(player, false);
+        this.zoneService.clearHighlight(player.getUniqueId());
+        this.zoneService.clearFocus(player.getUniqueId());
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
     public void onKick(final PlayerKickEvent event) {
-        this.zoneService.cancelSelection(event.getPlayer(), false);
+        final Player player = event.getPlayer();
+        this.zoneService.cancelSelection(player, false);
+        this.zoneService.clearHighlight(player.getUniqueId());
+        this.zoneService.clearFocus(player.getUniqueId());
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -94,11 +100,24 @@ public final class ZoneSelectionListener implements Listener {
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onSwapHand(final org.bukkit.event.player.PlayerSwapHandItemsEvent event) {
+        final Player player = event.getPlayer();
+        final SelectionSession session = this.zoneService.getSession(player.getUniqueId());
+        if (session != null) {
+            if (this.zoneService.isWand(event.getMainHandItem()) || this.zoneService.isWand(event.getOffHandItem())) {
+                event.setCancelled(true);
+            }
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onInventoryClick(final InventoryClickEvent event) {
         if (event.getWhoClicked() instanceof final Player player) {
             final SelectionSession session = this.zoneService.getSession(player.getUniqueId());
             if (session != null) {
-                if (event.getSlot() == session.slot() || this.zoneService.isWand(event.getCurrentItem())
+                if (event.getSlot() == session.slot()
+                    || (event.getClick() == org.bukkit.event.inventory.ClickType.NUMBER_KEY && event.getHotbarButton() == session.slot())
+                    || this.zoneService.isWand(event.getCurrentItem())
                     || this.zoneService.isWand(event.getCursor())) {
                     event.setCancelled(true);
                 }

@@ -142,6 +142,21 @@ public final class ZoneService {
             if (CoreBridge.PRESENT) {
                 CoreDelegate.removeBox(zone.world(), zone.name(), index);
             }
+            // Adjust any active highlight target box indices
+            for (final HighlightTarget target : this.highlights.values()) {
+                if (target.zoneName().equalsIgnoreCase(zone.name()) && !target.allBoxes()) {
+                    final Set<Integer> updated = new HashSet<>();
+                    for (final int idx : target.boxIndices()) {
+                        if (idx < index) {
+                            updated.add(idx);
+                        } else if (idx > index) {
+                            updated.add(idx - 1);
+                        }
+                    }
+                    target.boxIndices().clear();
+                    target.boxIndices().addAll(updated);
+                }
+            }
             save();
         }
         return removed;
@@ -151,6 +166,38 @@ public final class ZoneService {
         zone.clearBoxes();
         if (CoreBridge.PRESENT) {
             CoreDelegate.clearBoxes(zone.world(), zone.name());
+        }
+        save();
+    }
+
+    public void setZoneFrozen(final ZoneModel zone, final boolean frozen) {
+        zone.setFrozen(frozen);
+        if (CoreBridge.PRESENT) {
+            CoreDelegate.setFrozen(zone.world(), zone.name(), frozen);
+        }
+        save();
+    }
+
+    public void setZoneTickRate(final ZoneModel zone, final float tickRate) {
+        zone.setTickRate(tickRate);
+        if (CoreBridge.PRESENT) {
+            CoreDelegate.setTickRate(zone.world(), zone.name(), tickRate);
+        }
+        save();
+    }
+
+    public void addMemberToZone(final ZoneModel zone, final UUID member) {
+        zone.addMember(member);
+        if (CoreBridge.PRESENT) {
+            CoreDelegate.addMember(zone.world(), zone.name(), member);
+        }
+        save();
+    }
+
+    public void removeMemberFromZone(final ZoneModel zone, final UUID member) {
+        zone.removeMember(member);
+        if (CoreBridge.PRESENT) {
+            CoreDelegate.removeMember(zone.world(), zone.name(), member);
         }
         save();
     }
@@ -220,7 +267,7 @@ public final class ZoneService {
     public boolean cancelSelection(final Player player, final boolean sendMessage) {
         final SelectionSession session = this.sessions.remove(player.getUniqueId());
         if (session != null) {
-            player.getInventory().setItem(session.slot(), session.originalItem());
+            stripWandAndRestore(player, session);
             if (sendMessage) {
                 player.sendMessage(Component.text("[Zone] Selection cancelled.", NamedTextColor.YELLOW));
             }
@@ -239,9 +286,33 @@ public final class ZoneService {
                 + box.sizeX() + "x" + box.sizeY() + "x" + box.sizeZ() + ")", NamedTextColor.GREEN));
         }
 
-        // Restore original item
-        player.getInventory().setItem(session.slot(), session.originalItem());
+        stripWandAndRestore(player, session);
         this.sessions.remove(player.getUniqueId());
+    }
+
+    private void stripWandAndRestore(final Player player, final SelectionSession session) {
+        for (int i = 0; i < player.getInventory().getSize(); i++) {
+            final ItemStack it = player.getInventory().getItem(i);
+            if (isWand(it)) {
+                player.getInventory().setItem(i, null);
+            }
+        }
+        if (isWand(player.getInventory().getItemInOffHand())) {
+            player.getInventory().setItemInOffHand(null);
+        }
+
+        final ItemStack original = session.originalItem();
+        if (original != null && !original.getType().isAir()) {
+            final ItemStack current = player.getInventory().getItem(session.slot());
+            if (current == null || current.getType().isAir()) {
+                player.getInventory().setItem(session.slot(), original);
+            } else {
+                final Map<Integer, ItemStack> leftover = player.getInventory().addItem(original);
+                for (final ItemStack drop : leftover.values()) {
+                    player.getWorld().dropItemNaturally(player.getLocation(), drop);
+                }
+            }
+        }
     }
 
     public boolean isWand(final ItemStack item) {
@@ -357,7 +428,8 @@ public final class ZoneService {
             return;
         }
 
-        final int count = (int) Math.ceil(dist / step);
+        final double effectiveStep = Math.max(step, dist / 25.0);
+        final int count = (int) Math.ceil(dist / effectiveStep);
         for (int i = 0; i <= count; i++) {
             final double f = (double) i / count;
             player.spawnParticle(Particle.DUST, x1 + dx * f, y1 + dy * f, z1 + dz * f, 1, 0, 0, 0, 0, dust);
@@ -368,31 +440,36 @@ public final class ZoneService {
 
     private record SerializedZone(String name, String world, String owner, List<String> members, List<ZoneBox> boxes, boolean frozen, float tickRate) {}
 
-    private synchronized void save() {
-        try {
-            Files.createDirectories(this.storagePath.getParent());
-            final List<SerializedZone> list = new ArrayList<>();
-            for (final ZoneModel zone : this.zones.values()) {
-                final List<String> memberList = new ArrayList<>();
-                for (final UUID m : zone.members()) {
-                    memberList.add(m.toString());
-                }
-                list.add(new SerializedZone(
-                    zone.name(),
-                    zone.world(),
-                    zone.owner() != null ? zone.owner().toString() : null,
-                    memberList,
-                    zone.boxes(),
-                    zone.isFrozen(),
-                    zone.tickRate()
-                ));
+    private void save() {
+        final List<SerializedZone> list = new ArrayList<>();
+        for (final ZoneModel zone : this.zones.values()) {
+            final List<String> memberList = new ArrayList<>();
+            for (final UUID m : zone.members()) {
+                memberList.add(m.toString());
             }
-            try (final Writer writer = Files.newBufferedWriter(this.storagePath)) {
-                this.gson.toJson(list, writer);
-            }
-        } catch (final Exception e) {
-            this.plugin.getLogger().log(Level.WARNING, "Failed to save zones to " + this.storagePath, e);
+            list.add(new SerializedZone(
+                zone.name(),
+                zone.world(),
+                zone.owner() != null ? zone.owner().toString() : null,
+                memberList,
+                new ArrayList<>(zone.boxes()),
+                zone.isFrozen(),
+                zone.tickRate()
+            ));
         }
+
+        Bukkit.getScheduler().runTaskAsynchronously(this.plugin, () -> {
+            synchronized (this.storagePath) {
+                try {
+                    Files.createDirectories(this.storagePath.getParent());
+                    try (final Writer writer = Files.newBufferedWriter(this.storagePath)) {
+                        this.gson.toJson(list, writer);
+                    }
+                } catch (final Exception e) {
+                    this.plugin.getLogger().log(Level.WARNING, "Failed to save zones to " + this.storagePath, e);
+                }
+            }
+        });
     }
 
     private synchronized void load() {
@@ -495,6 +572,38 @@ public final class ZoneService {
 
         static void clearFocus(final UUID playerId) {
             io.papermc.paper.lab.zone.LabTickZones.clearFocus(playerId);
+        }
+
+        static void setFrozen(final String world, final String name, final boolean frozen) {
+            final io.papermc.paper.lab.zone.LabTickZone coreZone =
+                io.papermc.paper.lab.zone.LabTickZones.getZone(world, name);
+            if (coreZone != null) {
+                coreZone.setFrozen(frozen);
+            }
+        }
+
+        static void setTickRate(final String world, final String name, final float tickRate) {
+            final io.papermc.paper.lab.zone.LabTickZone coreZone =
+                io.papermc.paper.lab.zone.LabTickZones.getZone(world, name);
+            if (coreZone != null) {
+                coreZone.setTickRate(tickRate);
+            }
+        }
+
+        static void addMember(final String world, final String name, final UUID member) {
+            final io.papermc.paper.lab.zone.LabTickZone coreZone =
+                io.papermc.paper.lab.zone.LabTickZones.getZone(world, name);
+            if (coreZone != null) {
+                coreZone.addMember(member);
+            }
+        }
+
+        static void removeMember(final String world, final String name, final UUID member) {
+            final io.papermc.paper.lab.zone.LabTickZone coreZone =
+                io.papermc.paper.lab.zone.LabTickZones.getZone(world, name);
+            if (coreZone != null) {
+                coreZone.removeMember(member);
+            }
         }
     }
 }

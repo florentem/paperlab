@@ -58,11 +58,25 @@ public record ZoneBox(int minX, int minY, int minZ, int maxX, int maxY, int maxZ
         }
         final float saturation = 0.85f;
         final float value = 0.95f;
-        final int rgb = java.awt.Color.HSBtoRGB(hue, saturation, value);
-        final int r = (rgb >> 16) & 0xFF;
-        final int g = (rgb >> 8) & 0xFF;
-        final int b = rgb & 0xFF;
-        return Color.fromRGB(r, g, b);
+        return hsvToRgb(hue, saturation, value);
+    }
+
+    private static Color hsvToRgb(final float hue, final float saturation, final float value) {
+        final int h = (int) (hue * 6.0f);
+        final float f = hue * 6.0f - h;
+        final float p = value * (1.0f - saturation);
+        final float q = value * (1.0f - f * saturation);
+        final float t = value * (1.0f - (1.0f - f) * saturation);
+        float r = 0, g = 0, b = 0;
+        switch (h % 6) {
+            case 0 -> { r = value; g = t; b = p; }
+            case 1 -> { r = q; g = value; b = p; }
+            case 2 -> { r = p; g = value; b = t; }
+            case 3 -> { r = p; g = q; b = value; }
+            case 4 -> { r = t; g = p; b = value; }
+            case 5 -> { r = value; g = p; b = q; }
+        }
+        return Color.fromRGB((int) (r * 255.0f), (int) (g * 255.0f), (int) (b * 255.0f));
     }
 
     public static String getHexColor(final int index) {

@@ -586,9 +586,21 @@ public final class ZoneCommands {
             }
         }
 
-        final Player target = Bukkit.getPlayer(playerName);
-        final UUID targetUuid = target != null ? target.getUniqueId() : Bukkit.getOfflinePlayer(playerName).getUniqueId();
-        zone.addMember(targetUuid);
+        final Player target = Bukkit.getPlayerExact(playerName);
+        final UUID targetUuid;
+        if (target != null) {
+            targetUuid = target.getUniqueId();
+        } else {
+            final org.bukkit.OfflinePlayer offline = Bukkit.getOfflinePlayerIfCached(playerName);
+            if (offline != null) {
+                targetUuid = offline.getUniqueId();
+            } else {
+                sender.sendMessage(Component.text("[Zone] Player '" + playerName + "' not found (must be online or known to the server).", NamedTextColor.RED));
+                return 0;
+            }
+        }
+
+        service.addMemberToZone(zone, targetUuid);
         sender.sendMessage(Component.text("[Zone " + zone.name() + "] Member " + playerName + " added.", NamedTextColor.GREEN));
         return 1;
     }
@@ -607,9 +619,21 @@ public final class ZoneCommands {
             }
         }
 
-        final Player target = Bukkit.getPlayer(playerName);
-        final UUID targetUuid = target != null ? target.getUniqueId() : Bukkit.getOfflinePlayer(playerName).getUniqueId();
-        zone.removeMember(targetUuid);
+        final Player target = Bukkit.getPlayerExact(playerName);
+        final UUID targetUuid;
+        if (target != null) {
+            targetUuid = target.getUniqueId();
+        } else {
+            final org.bukkit.OfflinePlayer offline = Bukkit.getOfflinePlayerIfCached(playerName);
+            if (offline != null) {
+                targetUuid = offline.getUniqueId();
+            } else {
+                sender.sendMessage(Component.text("[Zone] Player '" + playerName + "' not found (must be online or known to the server).", NamedTextColor.RED));
+                return 0;
+            }
+        }
+
+        service.removeMemberFromZone(zone, targetUuid);
         sender.sendMessage(Component.text("[Zone " + zone.name() + "] Member " + playerName + " removed.", NamedTextColor.YELLOW));
         return 1;
     }
