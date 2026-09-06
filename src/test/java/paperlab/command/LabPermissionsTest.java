@@ -30,6 +30,7 @@ public class LabPermissionsTest {
     void testNodesContainAllCategories() {
         assertTrue(LabPermissions.nodes().containsKey(LabPermissions.LOG));
         assertTrue(LabPermissions.nodes().containsKey(LabPermissions.LOG_TPS));
+        assertTrue(LabPermissions.nodes().containsKey(LabPermissions.LOG_MSPT));
         assertTrue(LabPermissions.nodes().containsKey(LabPermissions.LOG_MOBCAPS));
         assertTrue(LabPermissions.nodes().containsKey(LabPermissions.LOG_COUNTER));
         assertTrue(LabPermissions.nodes().containsKey(LabPermissions.LOG_SPAWN));

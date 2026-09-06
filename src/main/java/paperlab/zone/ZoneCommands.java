@@ -64,6 +64,7 @@ public final class ZoneCommands {
                     .executes(ctx -> executeCreate(ctx.getSource().getSender(), service,
                         StringArgumentType.getString(ctx, "name")))))
             .then(Commands.literal("remove")
+                .executes(ctx -> executeRemoveFocused(ctx.getSource().getSender(), service))
                 .then(Commands.argument("name", StringArgumentType.word())
                     .suggests((ctx, builder) -> {
                         for (final ZoneModel z : service.allZones()) {
@@ -195,6 +196,7 @@ public final class ZoneCommands {
                     .executes(ctx -> executeCreate(ctx.getSource().getBukkitSender(), service,
                         StringArgumentType.getString(ctx, "name")))))
             .then(net.minecraft.commands.Commands.literal("remove")
+                .executes(ctx -> executeRemoveFocused(ctx.getSource().getBukkitSender(), service))
                 .then(net.minecraft.commands.Commands.argument("name", StringArgumentType.word())
                     .suggests((ctx, builder) -> {
                         for (final ZoneModel z : service.allZones()) {
@@ -329,6 +331,19 @@ public final class ZoneCommands {
         service.setFocus(player.getUniqueId(), name);
         sender.sendMessage(Component.text("[Zone " + name + "] Created and focused in " + world + ".", NamedTextColor.AQUA));
         return 1;
+    }
+
+    private static int executeRemoveFocused(final CommandSender sender, final ZoneService service) {
+        if (!(sender instanceof final Player player)) {
+            sender.sendMessage(Component.text("[Zone] Specify a zone name: /zone remove <name>", NamedTextColor.RED));
+            return 0;
+        }
+        final ZoneModel focused = service.getFocusedZone(player.getUniqueId());
+        if (focused == null) {
+            sender.sendMessage(Component.text("[Zone] No zone in focus. Specify a name: /zone remove <name>", NamedTextColor.RED));
+            return 0;
+        }
+        return executeRemove(sender, service, focused.name());
     }
 
     private static int executeRemove(final CommandSender sender, final ZoneService service, final String name) {

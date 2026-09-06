@@ -12,6 +12,7 @@ public final class LabLoggers {
     private static final Map<String, LabLogger> LOGGERS = new LinkedHashMap<>();
 
     public static final LabLogger TPS = register(new LabLogger("tps", false));
+    public static final LabLogger MSPT = register(new LabLogger("mspt", false));
 
     /**
      * The option is the name of the player or bot whose local cap to show. With no option, your
@@ -99,6 +100,9 @@ public final class LabLoggers {
     public static String permissionOf(final LabLogger logger) {
         if (logger == TPS) {
             return paperlab.command.LabPermissions.LOG_TPS;
+        }
+        if (logger == MSPT) {
+            return paperlab.command.LabPermissions.LOG_MSPT;
         }
         if (logger == MOBCAPS) {
             return paperlab.command.LabPermissions.LOG_MOBCAPS;

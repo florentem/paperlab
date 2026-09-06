@@ -30,6 +30,7 @@ public final class LabPermissions {
     // --- observation ---
     public static final String LOG = "paperlab.log";
     public static final String LOG_TPS = "paperlab.log.tps";
+    public static final String LOG_MSPT = "paperlab.log.mspt";
     public static final String LOG_MOBCAPS = "paperlab.log.mobcaps";
     public static final String LOG_COUNTER = "paperlab.log.counter";
     public static final String LOG_SPAWN = "paperlab.log.spawn";
@@ -138,6 +139,7 @@ public final class LabPermissions {
     static {
         NODES.put(LOG, "the /log command as a whole");
         NODES.put(LOG_TPS, "TPS and MSPT subscription");
+        NODES.put(LOG_MSPT, "MSPT subscription");
         NODES.put(LOG_MOBCAPS, "local mobcap subscription, including other players");
         NODES.put(LOG_COUNTER, "hopper counter subscription");
         NODES.put(LOG_SPAWN, "spawn trace subscription");
@@ -208,7 +210,7 @@ public final class LabPermissions {
 
         // 2. Intermediate wildcard nodes with explicit children mappings
         registerGroup(LOG_ALL, GROUPS.get(LOG_ALL), rootChildren,
-            LOG, LOG_TPS, LOG_MOBCAPS, LOG_COUNTER, LOG_SPAWN, LOG_ITEM, LOG_MICROTIMING, LOG_MOVEMENT);
+            LOG, LOG_TPS, LOG_MSPT, LOG_MOBCAPS, LOG_COUNTER, LOG_SPAWN, LOG_ITEM, LOG_MICROTIMING, LOG_MOVEMENT);
 
         registerGroup(SERVUX_ALL, GROUPS.get(SERVUX_ALL), rootChildren,
             SERVUX_HUD, SERVUX_SEED, SERVUX_STRUCTURES, SERVUX_LITEMATICS, SERVUX_ENTITIES,
