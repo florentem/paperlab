@@ -9,22 +9,22 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
 /**
- * Работа с плагином TAB, если он установлен.
+ * Working with the TAB plugin, when it is installed.
  *
- * <p><b>Зачем.</b> У TAB есть anti-override: он блокирует header/footer, приходящие от
- * других плагинов, и переустанавливает свой. Наш {@code sendPlayerListFooter} на сервере
- * с TAB не доживёт до следующего тика TAB — подписки {@code /log} будут мигать
- * или не покажутся вовсе. Драться с этим бессмысленно и вредно: anti-override нужен
- * именно затем, чтобы таб-лист не рвали на части несколько плагинов сразу.
+ * <p><b>Why.</b> TAB has an anti-override: it blocks headers and footers coming from other
+ * plugins and reinstates its own. On a server with TAB, our {@code sendPlayerListFooter} does
+ * not survive to TAB's next tick — the {@code /log} subscriptions would flicker or never show.
+ * Fighting that is pointless and harmful: the anti-override exists precisely so that several
+ * plugins do not tear the tab list apart at once.
  *
- * <p><b>Как правильно.</b> У TAB есть свой API для того же самого:
- * {@code TabAPI.getInstance().getHeaderFooterManager().setFooter(tabPlayer, text)}.
- * Значение, поставленное через него, TAB считает своим (forcedFooter) и не перетирает.
+ * <p><b>The right way.</b> TAB has its own API for the same thing:
+ * {@code TabAPI.getInstance().getHeaderFooterManager().setFooter(tabPlayer, text)}. A value set
+ * through it is treated by TAB as its own (forcedFooter) and is not overwritten.
  *
- * <p><b>Изоляция загрузчиков.</b> PaperLab загружается через PaperPluginLoader, у которого
- * изолированный classpath. Для вызова API TAB мы берём загрузчик самого плагина TAB
- * ({@code tabPlugin.getClass().getClassLoader()}) и обращаемся к интерфейсу через рефлексию.
- * Менеджер футера получается динамически, чтобы корректно переживать {@code /tab reload}.
+ * <p><b>Class loader isolation.</b> PaperLab is loaded through PaperPluginLoader, which has an
+ * isolated classpath. To call TAB's API we take TAB's own loader
+ * ({@code tabPlugin.getClass().getClassLoader()}) and reach the interface through reflection.
+ * The footer manager is fetched dynamically so that {@code /tab reload} is survived correctly.
  */
 public final class TabBridge {
 
@@ -42,7 +42,7 @@ public final class TabBridge {
     }
 
     /**
-     * Есть ли TAB и удалось ли к нему подключиться.
+     * Whether TAB is present and we managed to connect to it.
      */
     public static boolean available() {
         final Plugin tabPlugin = Bukkit.getPluginManager().getPlugin("TAB");
@@ -116,10 +116,10 @@ public final class TabBridge {
     }
 
     /**
-     * Поставить футер игроку через TAB API.
+     * Set a player's footer through TAB's API.
      *
-     * @return {@code true}, если это сделал TAB; {@code false} — вызывающий должен
-     *         поставить футер обычным путём
+     * @return {@code true} if TAB did it; {@code false} means the caller should set the footer
+     *         the ordinary way
      */
     public static boolean setFooter(final Player player, final Component footer) {
         if (!available()) {
@@ -132,14 +132,14 @@ public final class TabBridge {
             }
             final Object manager = getHeaderFooterManager.invoke(tabApi);
             if (manager == null) {
-                // В конфигурации TAB выключена секция header-footer
+                // The header-footer section is disabled in TAB's configuration.
                 return false;
             }
             final Object tabPlayer = getPlayer.invoke(tabApi, player.getUniqueId());
             if (tabPlayer == null) {
-                // Игрок ещё не загружен в TAB (например, сразу после входа).
-                // Возвращаем true, чтобы не перебивать TAB ванильным пакетом:
-                // на следующем тике TAB уже добавит игрока и подписки отобразятся.
+                // The player is not loaded into TAB yet (right after joining, say). We return
+                // true so as not to cut across TAB with a vanilla packet: on the next tick TAB
+                // will have added the player and the subscriptions will show.
                 return true;
             }
             setFooter.invoke(manager, tabPlayer, LEGACY.serialize(footer));
@@ -151,7 +151,7 @@ public final class TabBridge {
         }
     }
 
-    /** Вернуть футер под управление TAB (очистить forcedFooter). */
+    /** Hand the footer back to TAB (clear forcedFooter). */
     public static boolean clear(final Player player) {
         if (!available()) {
             return false;

@@ -10,38 +10,39 @@ import net.minecraft.nbt.NbtIo;
 import net.minecraft.network.FriendlyByteBuf;
 
 /**
- * Кадрирование пакетов Servux.
+ * Servux packet framing.
  *
- * <p>Разобрано по исходникам Servux. Устройство одинаково у всех его каналов и, что важно,
- * <b>не одно и то же для разных типов пакетов</b> — на этом легко ошибиться:
+ * <p>Recovered from the Servux sources. The layout is the same across all of its channels
+ * and, importantly, <b>not the same for different packet types</b> — an easy place to get
+ * it wrong:
  *
  * <pre>
  * varint packetType
- * если тип — metadata (1 и 2):  сетевой NBT, как FriendlyByteBuf.writeNbt
- * все остальные типы:           int длина + GZIP-поток именованного NBT (имя корня "")
+ * metadata types (1 and 2):  network NBT, as FriendlyByteBuf.writeNbt
+ * every other type:          int length + a GZIP stream of named NBT (root name "")
  * </pre>
  *
- * <p>Второй вариант — это {@code DataByteBufUtils.toByteBuf}: он пишет длину, а потом
- * gzip'ованный NBT в классическом (именованном) формате. Ванильный
- * {@code NbtIo.writeCompressed} делает ровно это же: тип, пустое имя, тело, всё под GZIP.
+ * <p>The second variant is {@code DataByteBufUtils.toByteBuf}: it writes a length and then
+ * gzipped NBT in the classic (named) format. Vanilla {@code NbtIo.writeCompressed} does
+ * exactly the same: type, empty name, body, all under GZIP.
  *
- * <p>Клиент об ошибках разбора не сообщает вообще: при расхождении в байтах MiniHUD просто
- * не считает сервер «серверсайдным». Поэтому кадрирование здесь и в одном месте.
+ * <p>The client never reports a parse error: on a byte mismatch MiniHUD simply stops
+ * treating the server as "server-side". That is why framing lives here, in one place.
  */
 public final class ServuxWire {
 
-    /** Порог NBT при чтении: сколько байт клиенту позволено прислать в одном пакете. */
+    /** NBT read quota: how many bytes a client may send in a single packet. */
     private static final long READ_LIMIT = 2 * 1024 * 1024L;
 
     private ServuxWire() {
     }
 
-    /** Тип пакета — первое поле в любом кадре. */
+    /** Packet type — the first field of every frame. */
     public static int readType(final byte[] data) {
         return new FriendlyByteBuf(Unpooled.wrappedBuffer(data)).readVarInt();
     }
 
-    /** Тело metadata-пакета: сетевой NBT сразу после типа. */
+    /** Body of a metadata packet: network NBT right after the type. */
     public static CompoundTag readNetworkNbt(final byte[] data) {
         final FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.wrappedBuffer(data));
         buf.readVarInt();
@@ -50,24 +51,24 @@ public final class ServuxWire {
     }
 
     /**
-     * Тело обычного пакета — читаем терпимо, перебирая известные варианты.
+     * Body of an ordinary packet — read leniently, trying the known variants.
      *
-     * <p>Так пришлось сделать не от лени. Servux пишет «длина + GZIP именованного NBT»
-     * и читает его же, но <b>клиент</b> берёт writer из malilib, и байты от MiniHUD в этот
-     * формат не укладываются: длина читается как 167837699 при пакете в 22 байта. Гадать,
-     * какой именно из вариантов у malilib, дороже, чем перебрать три — тем более что
-     * перебор безвреден: неверный вариант падает на первом же байте.
+     * <p>This is not laziness. Servux writes "length + GZIP of named NBT" and reads the
+     * same, but the <b>client</b> takes its writer from malilib, and MiniHUD's bytes do not
+     * fit that format: the length reads as 167837699 for a 22-byte packet. Guessing which
+     * malilib variant is in play costs more than trying three — especially as trying is
+     * harmless: a wrong variant fails on the very first byte.
      *
-     * <p>Порядок: длина + GZIP (как у Servux), длина + несжатый NBT (запасной путь самого
-     * Servux), затем сетевой NBT (как у ванильного {@code writeNbt}).
+     * <p>Order: length + GZIP (as Servux writes), length + uncompressed NBT (Servux's own
+     * fallback), then network NBT (as vanilla {@code writeNbt}).
      *
-     * <p>Если не подошло ничего — бросаем с шестнадцатеричным дампом. Молча вернуть пустой
-     * компаунд было бы хуже: канал бы «работал», а данные терялись.
+     * <p>If nothing fits we throw, with a hex dump. Silently returning an empty compound
+     * would be worse: the channel would appear to work while the data went missing.
      */
     public static CompoundTag readCompressedNbt(final byte[] data) throws IOException {
         final int prefix = varIntLength(data);
 
-        // 1. Сетевой NBT сразу после типа (как шлёт MiniHUD / Litematica).
+        // 1. Network NBT right after the type (what MiniHUD / Litematica send).
         try {
             final FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.wrappedBuffer(data));
             buf.readVarInt();
@@ -76,10 +77,10 @@ public final class ServuxWire {
                 return tag;
             }
         } catch (final Throwable ignored) {
-            // следующий вариант
+            // try the next variant
         }
 
-        // 2. Длина + GZIP.
+        // 2. Length + GZIP.
         try {
             final FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.wrappedBuffer(data));
             buf.readVarInt();
@@ -91,10 +92,10 @@ public final class ServuxWire {
                     NbtAccounter.create(READ_LIMIT));
             }
         } catch (final Throwable ignored) {
-            // следующий вариант
+            // try the next variant
         }
 
-        // 3. Длина + несжатый именованный NBT.
+        // 3. Length + uncompressed named NBT.
         try {
             final FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.wrappedBuffer(data));
             buf.readVarInt();
@@ -105,7 +106,7 @@ public final class ServuxWire {
                 return NbtIo.read(new DataInputStream(new ByteArrayInputStream(body)));
             }
         } catch (final Throwable ignored) {
-            // не подошло ничего
+            // nothing matched
         }
 
         throw new IOException("unknown NBT framing, prefix " + prefix
@@ -113,25 +114,25 @@ public final class ServuxWire {
     }
 
     /**
-     * Разобрать тело <b>без</b> префикса типа — то, что собрал разрезатель.
+     * Parse a body <b>without</b> the type prefix — what the reassembler produced.
      *
-     * <p>Перебор тот же и по той же причине: у malilib две перегрузки записи, и они
-     * дают разные форматы. Мелкие пакеты канала HUD приходят сетевым NBT, а вот большое
-     * тело от Litematica — нет: {@code readNbt} на нём падает с
-     * {@code ReportedNbtException}. Отсюда «длина + GZIP» первым кандидатом.
+     * <p>The same fallback chain, for the same reason: malilib has two write overloads and
+     * they produce different formats. Small HUD-channel packets arrive as network NBT, but
+     * a large Litematica body does not: {@code readNbt} fails on it with
+     * {@code ReportedNbtException}. Hence "length + GZIP" as the first candidate.
      *
-     * @param label что разбираем — попадёт в лог при неудаче
-     * @return разобранный компаунд; какой вариант сработал, видно по {@link #lastVariant()}
+     * @param label what is being parsed — appears in the log on failure
+     * @return the parsed compound; which variant worked is visible via {@link #lastVariant()}
      */
     public static CompoundTag readBody(final byte[] body, final String label) throws IOException {
-        // 0. varint + сетевой NBT — то, что на самом деле шлёт malilib.
+        // 0. varint + network NBT — what malilib actually sends.
         //
-        // Дамп настоящего запроса Litematica начинался так:
+        // A dump of a real Litematica request began like this:
         //   ff ff ff ff 0f | 0a | 0a 00 10 "RenderLayerRange" ...
-        // Первые пять байт — varint со значением -1 (видимо, «длина неизвестна»),
-        // дальше обычный сетевой NBT: 0x0a — TAG_Compound, затем первое поле.
-        // Без дампа этот вариант было не угадать: он не совпадает ни с одной
-        // перегрузкой в исходниках Servux.
+        // The first five bytes are a varint holding -1 (apparently "length unknown"),
+        // followed by ordinary network NBT: 0x0a is TAG_Compound, then the first field.
+        // Without the dump this variant was unguessable: it matches no overload in the
+        // Servux sources.
         try {
             final FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.wrappedBuffer(body));
             buf.readVarInt();
@@ -141,10 +142,10 @@ public final class ServuxWire {
                 return tag;
             }
         } catch (final Throwable ignored) {
-            // следующий вариант
+            // try the next variant
         }
 
-        // 1. Длина + GZIP.
+        // 1. Length + GZIP.
         try {
             final FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.wrappedBuffer(body));
             final int length = buf.readInt();
@@ -157,10 +158,10 @@ public final class ServuxWire {
                 return tag;
             }
         } catch (final Throwable ignored) {
-            // следующий вариант
+            // try the next variant
         }
 
-        // 2. Длина + несжатый именованный NBT.
+        // 2. Length + uncompressed named NBT.
         try {
             final FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.wrappedBuffer(body));
             final int length = buf.readInt();
@@ -172,10 +173,10 @@ public final class ServuxWire {
                 return tag;
             }
         } catch (final Throwable ignored) {
-            // следующий вариант
+            // try the next variant
         }
 
-        // 3. Сетевой NBT с начала тела.
+        // 3. Network NBT from the start of the body.
         try {
             final CompoundTag tag = new FriendlyByteBuf(Unpooled.wrappedBuffer(body)).readNbt();
             if (tag != null) {
@@ -183,17 +184,17 @@ public final class ServuxWire {
                 return tag;
             }
         } catch (final Throwable ignored) {
-            // следующий вариант
+            // try the next variant
         }
 
-        // 4. GZIP без префикса длины.
+        // 4. GZIP with no length prefix.
         try {
             final CompoundTag tag = NbtIo.readCompressed(new ByteArrayInputStream(body),
                 NbtAccounter.create(READ_LIMIT));
             lastVariant = "gzip";
             return tag;
         } catch (final Throwable ignored) {
-            // не подошло ничего
+            // nothing matched
         }
 
         throw new IOException(label + ": unknown body framing, " + body.length
@@ -202,12 +203,12 @@ public final class ServuxWire {
 
     private static volatile String lastVariant = "?";
 
-    /** Какой вариант разбора сработал последним. Нужно только для лога. */
+    /** Which parse variant worked last. Used for logging only. */
     public static String lastVariant() {
         return lastVariant;
     }
 
-    /** Сколько байт занял varint типа: нужно только для сообщения об ошибке. */
+    /** How many bytes the type varint took: needed only for the error message. */
     private static int varIntLength(final byte[] data) {
         final FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.wrappedBuffer(data));
         final int before = buf.readableBytes();
@@ -215,7 +216,7 @@ public final class ServuxWire {
         return before - buf.readableBytes();
     }
 
-    /** Дамп для разбора незнакомого формата. Обрезаем: длинный дамп никто не читает. */
+    /** A dump for working out an unfamiliar format. Truncated: nobody reads a long one. */
     private static String hex(final byte[] data) {
         final StringBuilder out = new StringBuilder();
         final int limit = Math.min(data.length, 48);
@@ -229,13 +230,13 @@ public final class ServuxWire {
     }
 
     /**
-     * Дописать сетевой NBT в буфер.
+     * Append network NBT to a buffer.
      */
     public static void appendNbtBody(final FriendlyByteBuf buf, final CompoundTag tag) {
         buf.writeNbt(tag);
     }
 
-    /** Собрать metadata-кадр. */
+    /** Build a metadata frame. */
     public static byte[] metadata(final int type, final CompoundTag tag) {
         final FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
         buf.writeVarInt(type);
@@ -244,11 +245,12 @@ public final class ServuxWire {
     }
 
     /**
-     * Собрать data-кадр Servux: varint(type) + сетевой NBT.
+     * Build a Servux data frame: varint(type) + network NBT.
      *
-     * <p>Клиент MiniHUD читает все типы пакетов (SPAWN_DATA, WEATHER_TICK, DATA_LOGGER_TICK)
-     * через {@code FriendlyByteBuf.readNbt()}. Любые префиксы длины или GZIP оставляют
-     * непрочитанные байты в Netty-буфере и приводят к кику клиента с DecoderException.
+     * <p>The MiniHUD client reads every packet type (SPAWN_DATA, WEATHER_TICK,
+     * DATA_LOGGER_TICK) through {@code FriendlyByteBuf.readNbt()}. Any length prefix or GZIP
+     * leaves unread bytes in the Netty buffer and gets the client kicked with a
+     * DecoderException.
      */
     public static byte[] data(final int type, final CompoundTag tag) {
         return metadata(type, tag);

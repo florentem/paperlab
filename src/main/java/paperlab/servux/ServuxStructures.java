@@ -28,26 +28,23 @@ import org.jetbrains.annotations.NotNull;
 import paperlab.command.LabPermissions;
 
 /**
- * Канал {@code servux:structures} — рамки структур в MiniHUD.
+ * The {@code servux:structures} channel — structure bounding boxes in MiniHUD.
  *
- * <p>Пока реализовано <b>только рукопожатие</b>: клиент регистрируется, сервер отвечает
- * метаданными, и MiniHUD перестаёт считать канал мёртвым. Сами данные структур ещё не
- * шлются.
+ * <p>The handshake and periodic structure delivery are implemented here.
  *
- * <p><b>Почему разделено.</b> Данные структур ходят не одним пакетом, а через «разрезатель»
- * Servux: {@code STRUCTURE_DATA_START} с размером, затем куски {@code STRUCTURE_DATA}
- * сырыми байтами. Тот же разрезатель нужен и каналу {@code servux:litematics}, поэтому его
- * стоит написать один раз и аккуратно, а не по разу на канал. Рукопожатие от этого не
- * зависит и полезно уже сейчас: без него клиент не покажет даже то, что сервер на связи.
+ * <p><b>Why it is split.</b> Structure data does not travel as one packet but through Servux's
+ * splitter: {@code STRUCTURE_DATA_START} with a size, then {@code STRUCTURE_DATA} chunks of
+ * raw bytes. The same splitter is needed by the {@code servux:litematics} channel, so it is
+ * worth writing once and carefully rather than once per channel.
  *
- * <p>Версия протокола и строка {@code servux} проверяются клиентом ровно так же, как
- * в {@link ServuxHud} — при расхождении он молча выключает оверлей.
+ * <p>The protocol version and the {@code servux} string are checked by the client exactly as
+ * in {@link ServuxHud} — on a mismatch it silently disables the overlay.
  */
 public final class ServuxStructures implements PluginMessageListener {
 
     public static final String CHANNEL = "servux:structures";
 
-    /** Версия протокола Servux для этого канала. */
+    /** Servux protocol version for this channel. */
     public static final int PROTOCOL_VERSION = 3;
 
     private static final int S2C_METADATA = 1;
@@ -56,21 +53,21 @@ public final class ServuxStructures implements PluginMessageListener {
     private static final int C2S_UNREGISTER = 4;
 
     /**
-     * Радиус в чанках, в котором ищем структуры вокруг игрока.
+     * Radius in chunks searched for structures around a player.
      *
-     * <p>Обходим только уже загруженные чанки: подгружать мир ради рамок нельзя, иначе
-     * инструмент наблюдения начнёт менять то, за чем наблюдает.
+     * <p>Only already loaded chunks are walked: loading the world for the sake of bounding
+     * boxes is not allowed, or an observation tool would start changing what it observes.
      */
     private static final int SEARCH_RADIUS_CHUNKS = 12;
 
-    /** Как часто пересылать структуры. Чаще незачем: рамки почти не меняются. */
+    /** How often to resend structures. More often is pointless: the boxes barely change. */
     private static final int SEND_PERIOD_TICKS = 20 * 10;
 
     private static int tickCounter;
 
     /**
-     * Сколько секунд клиент держит полученные структуры, не получая обновлений.
-     * Значение по умолчанию у Servux; клиент читает его из метаданных.
+     * How many seconds the client keeps received structures without an update. Servux's default;
+     * the client reads it from the metadata.
      */
     private static final int TIMEOUT_SECONDS = 300;
 
@@ -146,7 +143,7 @@ public final class ServuxStructures implements PluginMessageListener {
         sendStructures(player);
     }
 
-    /** Периодическая рассылка. Вызывается из общего тика плагина. */
+    /** Periodic delivery. Called from the plugin's shared tick. */
     public static void tick() {
         if (REGISTERED.isEmpty() || ++tickCounter % SEND_PERIOD_TICKS != 0) {
             return;
@@ -159,17 +156,17 @@ public final class ServuxStructures implements PluginMessageListener {
     }
 
     /**
-     * Собрать структуры вокруг игрока и отправить.
+     * Collect the structures around a player and send them.
      *
-     * <p>Формат подсмотрен у клиента, а не у Servux — после истории с кадрированием сверяюсь
-     * только с тем кодом, который эти байты читает:
+     * <p>The format was taken from the client rather than from Servux — after the framing
+     * episode I only check against the code that actually reads these bytes:
      *
      * <pre>
-     * { Structures: [ { id: строка, ExpandBox: bool, Children: [ { BB: int[6] } ] } ] }
+     * { Structures: [ { id: string, ExpandBox: bool, Children: [ { BB: int[6] } ] } ] }
      * </pre>
      *
-     * {@code BB} — {@code minX minY minZ maxX maxY maxZ}, как читает
-     * {@code IntBoundingBox.fromArray}.
+     * {@code BB} is {@code minX minY minZ maxX maxY maxZ}, as {@code IntBoundingBox.fromArray}
+     * reads it.
      */
     private static void sendStructures(final Player player) {
         try {
@@ -179,7 +176,7 @@ public final class ServuxStructures implements PluginMessageListener {
 
             for (int x = centre.x() - SEARCH_RADIUS_CHUNKS; x <= centre.x() + SEARCH_RADIUS_CHUNKS; x++) {
                 for (int z = centre.z() - SEARCH_RADIUS_CHUNKS; z <= centre.z() + SEARCH_RADIUS_CHUNKS; z++) {
-                    // Только уже загруженные чанки: см. комментарий у SEARCH_RADIUS_CHUNKS.
+                    // Loaded chunks only: see the comment on SEARCH_RADIUS_CHUNKS.
                     final LevelChunk chunk = level.getChunkSource().getChunkNow(x, z);
                     if (chunk == null) {
                         continue;
@@ -230,7 +227,7 @@ public final class ServuxStructures implements PluginMessageListener {
             children.add(child);
         }
         if (children.isEmpty()) {
-            // Без частей клиент не построит рамку и просто отбросит запись.
+            // Without children the client cannot build a box and simply drops the entry.
             final CompoundTag child = new CompoundTag();
             child.putIntArray("BB", box(start.getBoundingBox()));
             children.add(child);
@@ -250,11 +247,11 @@ public final class ServuxStructures implements PluginMessageListener {
     }
 
     /**
-     * Тело для разрезателя — сетевой NBT.
+     * The body for the splitter — network NBT.
      *
-     * <p>Servux пишет здесь «длина + GZIP», но клиент читает кодеком malilib, а он, как
-     * выяснилось на канале HUD, работает с сетевым NBT. Повторять за Servux второй раз
-     * не будем: именно это разорвало соединение в прошлый раз.
+     * <p>Servux writes "length + GZIP" here, but the client reads with a malilib codec, and
+     * that, as the HUD channel showed, works in network NBT. We will not follow Servux a second
+     * time: that is exactly what dropped the connection last time.
      */
     private static byte[] encode(final CompoundTag tag) throws IOException {
         final io.netty.buffer.ByteBuf buffer = io.netty.buffer.Unpooled.buffer();
@@ -267,7 +264,7 @@ public final class ServuxStructures implements PluginMessageListener {
         return out;
     }
 
-    /** Отправка в обход {@code sendPluginMessage}: причина та же, что в {@link ServuxHud}. */
+    /** Sending that bypasses {@code sendPluginMessage}, for the reason given in {@link ServuxHud}. */
     private static void send(final Player player, final byte[] body) {
         final var connection = ((CraftPlayer) player).getHandle().connection;
         if (connection != null) {

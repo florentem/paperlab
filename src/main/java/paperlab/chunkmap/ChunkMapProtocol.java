@@ -24,38 +24,40 @@ import net.minecraft.world.level.chunk.status.ChunkStatus;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
- * Серверная сторона протокола ChunkDebug — под уже существующий клиентский мод.
+ * Server side of the ChunkDebug protocol, for the existing client mod.
  *
- * <p>Пространство имён {@code chunk-debug}, версия протокола {@code 4}.
+ * <p>Namespace {@code chunk-debug}, protocol version {@code 4}.
  *
- * <p><b>Формат воспроизводится по исходникам мода буквально.</b> Это не стилистическое
- * требование: любое расхождение в байтах ломает разбор всего пакета, а клиент при этом
- * ничего не сообщает — просто показывает пустую карту. Первая версия здесь разошлась
- * в двух местах и именно так и выглядела:
+ * <p><b>The format is reproduced from the mod's sources literally.</b> That is not a
+ * stylistic requirement: any byte-level mismatch breaks parsing of the whole packet, and the
+ * client reports nothing — it simply shows an empty map. The first version diverged in two
+ * places and looked exactly like that:
  *
  * <ul>
- *   <li>ticket писался как {@code utf, int level, varlong ticksLeft}, а мод читает
- *       {@code identifier, int ticksLeft, int level} — и порядок другой, и varlong вместо int;</li>
- *   <li>стадия генерации писалась как {@code boolean + identifier}, а мод использует
- *       {@code ByteBufCodecs.fromCodec}, то есть <b>NBT-тег</b>, а не строку.</li>
+ *   <li>a ticket was written as {@code utf, int level, varlong ticksLeft}, while the mod reads
+ *       {@code identifier, int ticksLeft, int level} — different order, and varlong instead of
+ *       int;</li>
+ *   <li>the generation stage was written as {@code boolean + identifier}, while the mod uses
+ *       {@code ByteBufCodecs.fromCodec}, that is an <b>NBT tag</b> rather than a string.</li>
  * </ul>
  *
- * <p>Поэтому кодеки ниже собраны из тех же кирпичей, что у мода ({@code ChunkStatus.CODEC},
- * {@code Unit.CODEC}, {@code Codec.either}, {@code ByteBufCodecs.fromCodec}) — так
- * совпадение байтов следует из конструкции, а не из аккуратности.
+ * <p>So the codecs below are assembled from the same building blocks the mod uses
+ * ({@code ChunkStatus.CODEC}, {@code Unit.CODEC}, {@code Codec.either},
+ * {@code ByteBufCodecs.fromCodec}) — that way matching bytes follow from the construction
+ * rather than from care.
  *
- * <p><b>Почему сервер приходится писать заново.</b> Серверная часть ChunkDebug сделана
- * миксинами в ванильные {@code ChunkMap}, {@code DistanceManager}, {@code TicketStorage}
- * и {@code TickingTracker}. Paper заменяет всю эту подсистему на Moonrise, поэтому
- * донорские миксины неприменимы: данные берутся из
- * {@code ChunkHolderManager}/{@code NewChunkHolder} (см. {@link ChunkMapTracker}).
+ * <p><b>Why the server has to be rewritten.</b> ChunkDebug's server side is made of mixins
+ * into vanilla {@code ChunkMap}, {@code DistanceManager}, {@code TicketStorage} and
+ * {@code TickingTracker}. Paper replaces that whole subsystem with Moonrise, so those mixins
+ * do not apply: the data comes from {@code ChunkHolderManager}/{@code NewChunkHolder} (see
+ * {@link ChunkMapTracker}).
  */
 public final class ChunkMapProtocol {
 
     public static final String NAMESPACE = "chunk-debug";
     public static final int PROTOCOL_VERSION = 4;
 
-    /** Тип ticket'а, которого нет в реестре. То же имя, что у мода. */
+    /** A ticket type absent from the registry. Same name as the mod uses. */
     private static final Identifier UNREGISTERED = id("unregistered");
 
     private ChunkMapProtocol() {
@@ -65,24 +67,24 @@ public final class ChunkMapProtocol {
         return Identifier.fromNamespaceAndPath(NAMESPACE, path);
     }
 
-    // --- вспомогательные кодеки ---
+    // --- helper codecs ---
 
-    /** {@code writeResourceKey} пишет идентификатор ключа — ровно как у мода. */
+    /** {@code writeResourceKey} writes the key's identifier — exactly as the mod does. */
     public static final StreamCodec<RegistryFriendlyByteBuf, ResourceKey<Level>> DIMENSION =
         StreamCodec.of(
             (buf, key) -> buf.writeResourceKey(key),
             buf -> buf.readResourceKey(Registries.DIMENSION)
         );
 
-    /** Список измерений: именно так устроены start_watching и stop_watching. */
+    /** A list of dimensions: that is how start_watching and stop_watching are shaped. */
     public static final StreamCodec<RegistryFriendlyByteBuf, List<ResourceKey<Level>>> DIMENSIONS =
         ByteBufCodecs.<RegistryFriendlyByteBuf, ResourceKey<Level>>list().apply(DIMENSION);
 
     /**
-     * Стадия генерации, {@code null} — «чанк ещё не сгенерирован».
+     * Generation stage; {@code null} means "the chunk is not generated yet".
      *
-     * <p>Собрано так же, как в моде: {@code either(ChunkStatus.CODEC, Unit.CODEC)} через
-     * {@code fromCodec}, то есть на проводе это NBT-тег.
+     * <p>Assembled as in the mod: {@code either(ChunkStatus.CODEC, Unit.CODEC)} through
+     * {@code fromCodec}, so on the wire this is an NBT tag.
      */
     private static final Codec<Optional<ChunkStatus>> OPTIONAL_CHUNK_STATUS_CODEC =
         Codec.either(ChunkStatus.CODEC, Unit.CODEC)
@@ -97,11 +99,11 @@ public final class ChunkMapProtocol {
         ByteBufCodecs.fromCodec(OPTIONAL_CHUNK_STATUS_CODEC);
 
     /**
-     * Ticket: тип, сколько тиков осталось, уровень — <b>именно в этом порядке</b>.
+     * A ticket: type, ticks remaining, level — <b>in exactly that order</b>.
      *
-     * <p>Тип передаётся идентификатором из реестра. У Paper есть собственные типы,
-     * которых нет в ваниле; клиент показывает незнакомые как есть, поэтому подмена или
-     * фильтрация здесь недопустима — иначе картина tickets перестанет быть настоящей.
+     * <p>The type travels as a registry identifier. Paper has types of its own that vanilla
+     * lacks; the client shows unknown ones as they are, so substituting or filtering here is
+     * not allowed — the ticket picture would stop being the real one.
      */
     public record TicketInfo(Identifier type, int level, int ticksLeft) {
     }
@@ -128,20 +130,20 @@ public final class ChunkMapProtocol {
         return key == null ? UNREGISTERED : key;
     }
 
-    /** Имя типа для текстовых сводок; в протоколе не участвует. */
+    /** Type name for text summaries; not part of the protocol. */
     public static String ticketTypeName(final TicketType type) {
         return Util.getRegisteredName(BuiltInRegistries.TICKET_TYPE, type);
     }
 
-    // --- модель чанка ---
+    // --- chunk model ---
 
     /**
-     * @param position            координаты чанка
-     * @param stage               стадия генерации; {@code null} — не сгенерирован
-     * @param tickets             tickets, удерживающие чанк
-     * @param statusLevel         уровень ticket'а
-     * @param tickingStatusLevel  уровень, учитывающий ticking-распространение
-     * @param unloading           чанк помечен на выгрузку
+     * @param position            chunk coordinates
+     * @param stage               generation stage; {@code null} means not generated
+     * @param tickets             the tickets holding the chunk
+     * @param statusLevel         the ticket level
+     * @param tickingStatusLevel  the level including ticking propagation
+     * @param unloading           the chunk is marked for unload
      */
     public record ChunkInfo(
         ChunkPos position,
@@ -176,6 +178,6 @@ public final class ChunkMapProtocol {
     public static final StreamCodec<RegistryFriendlyByteBuf, Collection<ChunkInfo>> CHUNK_INFO_LIST =
         ByteBufCodecs.collection(ArrayList::new, CHUNK_INFO);
 
-    // Записи-пакеты здесь не объявляются: тело кодируется напрямую в ChunkMapWire
-    // через DiscardedPayload, поэтому регистрировать типы в реестре протокола не нужно.
+    // No packet records are declared here: the body is encoded directly in ChunkMapWire via
+    // DiscardedPayload, so there is no need to register types in the protocol registry.
 }

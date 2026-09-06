@@ -14,12 +14,11 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Логгер расчета движения сущностей (/log movement).
+ * Entity movement calculation logger (/log movement).
  *
- * <p>Идентичен реализации Carpet-TIS-Addition:
- * отображает попытку движения, тип (Self logic, Player action, Piston),
- * промежуточные изменения вектора (Piston Limit, Sneaking, Collision)
- * и итоговый вектор и позицию.
+ * <p>Matches Carpet-TIS-Addition's behaviour: shows the movement attempt, its type (Self logic,
+ * Player action, Piston), the intermediate changes to the vector (Piston Limit, Sneaking,
+ * Collision), and the resulting vector and position.
  */
 public final class MovementLogger {
 
@@ -62,14 +61,14 @@ public final class MovementLogger {
             return true;
         }
 
-        // Селекторы вида @a[distance=..10] или @e[distance=..5]
+        // Selectors of the form @a[distance=..10] or @e[distance=..5].
         if (option.startsWith("@a") || option.startsWith("@e")) {
             final boolean requirePlayer = option.startsWith("@a");
             if (requirePlayer && !isSelf && Bukkit.getPlayerExact(entityName) == null) {
                 return false;
             }
 
-            // Парсим distance=..N
+            // Parse distance=..N
             final int distIdx = option.indexOf("distance=..");
             if (distIdx != -1) {
                 final int endIdx = option.indexOf("]", distIdx);
@@ -88,7 +87,7 @@ public final class MovementLogger {
                 }
             }
 
-            // Парсим type=X
+            // Parse type=X
             final int typeIdx = option.indexOf("type=");
             if (typeIdx != -1) {
                 final int endIdx = option.indexOf("]", typeIdx);

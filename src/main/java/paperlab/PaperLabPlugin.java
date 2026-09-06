@@ -15,22 +15,22 @@ import paperlab.log.LabHud;
 import paperlab.log.LabLoggers;
 
 /**
- * Технический инструментарий Paper 26.2.
+ * Technical toolset for Paper 26.2.
  *
- * <h2>Как поделена работа</h2>
+ * <h2>How the work is split</h2>
  * <ul>
- *   <li><b>Плагин</b> — всё, что можно сделать плагином: команды, HUD в таб-листе,
- *       счётчики воронок, чтение локального мобкапа, карта чанков для ChunkDebug.
- *       Пересобирается за секунды.</li>
- *   <li><b>Ядро</b> — только то, чего плагином сделать нельзя: полный режим наблюдателя
- *       и трасса спавна. Один патч, шесть точек, см. {@link CoreBridge}.</li>
- *   <li><b>Боты</b> — своя реализация в ядре, {@code /player}. Готовый FakePlayer-CE
- *       пробовали и отказались: бот не наследует от вызывающего позицию и взгляд.
- *       Плагин только подвешивает готовый узел под {@code /carpet}.</li>
+ *   <li><b>Plugin</b> — everything a plugin can do: commands, the tab-list HUD, hopper
+ *       counters, reading the local mobcap, the chunk map for ChunkDebug. Rebuilds in
+ *       seconds.</li>
+ *   <li><b>Core</b> — only what a plugin cannot do: full observer mode and the spawn trace.
+ *       One patch, six sites, see {@link CoreBridge}.</li>
+ *   <li><b>Bots</b> — our own implementation in the core, {@code /player}. The ready-made
+ *       FakePlayer-CE was tried and rejected: its bots do not inherit the caller's position
+ *       and look. The plugin only attaches the existing node under {@code /carpet}.</li>
  * </ul>
  *
- * <p>Без нашего ядра плагин продолжает работать в урезанном виде — это нужно для
- * прогонов на нетронутом Paper, с которыми сравниваются результаты.
+ * <p>Without our core the plugin keeps working in reduced form — that is what control runs on
+ * untouched Paper need, and results are compared against them.
  */
 public final class PaperLabPlugin extends JavaPlugin implements Listener {
 
@@ -46,8 +46,8 @@ public final class PaperLabPlugin extends JavaPlugin implements Listener {
     public void onEnable() {
         instance = this;
 
-        // Порядок важен: значения по умолчанию применяются до регистрации команд,
-        // чтобы /carpet сразу показывал действующее состояние, а не ванильное.
+        // Order matters: the defaults are applied before command registration, so that
+        // /carpet shows the state in force straight away rather than the vanilla one.
         this.ruleDefaults = new paperlab.rules.RuleDefaults(
             this.getDataFolder().toPath().resolve("rules.conf"), this.getLogger());
         this.ruleDefaults.load();
@@ -55,7 +55,7 @@ public final class PaperLabPlugin extends JavaPlugin implements Listener {
         paperlab.rules.LabRules.applyDefaults(this.ruleDefaults, this.getLogger()::info);
         paperlab.rules.LabRules.applyAll();
 
-        // Права регистрируем до команд: их requires уже спрашивают эти узлы.
+        // Permissions are registered before commands: their requires already ask for these nodes.
         paperlab.command.LabPermissions.register();
         LabCommands.register(this);
 
@@ -68,7 +68,7 @@ public final class PaperLabPlugin extends JavaPlugin implements Listener {
         paperlab.log.microtiming.MicroTimingLogListener.init();
         Bukkit.getPluginManager().registerEvents(new paperlab.log.microtiming.MicroTimingLogListener(), this);
         if (!CoreBridge.PRESENT) {
-            // Урезанная трасса спавна нужна только там, где нет полной из ядра.
+            // The reduced spawn trace is only needed where the full one from the core is absent.
             Bukkit.getPluginManager().registerEvents(new paperlab.spawn.SpawnCounters(), this);
         }
         ChunkMapService.enable(this);
@@ -79,7 +79,7 @@ public final class PaperLabPlugin extends JavaPlugin implements Listener {
         paperlab.servux.ServuxTweaks.enable(this);
         paperlab.cplay.CPlayService.enable(this);
 
-        // Один общий тик: счётчики каждый тик, HUD раз в секунду (решает сам LabHud).
+        // One shared tick: counters every tick, HUD once a second (LabHud decides that itself).
         Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> {
             LabCounters.tick();
             LabHud.tick();
@@ -106,10 +106,10 @@ public final class PaperLabPlugin extends JavaPlugin implements Listener {
         for (final Player player : Bukkit.getOnlinePlayers()) {
             paperlab.log.LabHud.clear(player);
         }
-        // Правила меняют поведение мира: снимать их обязательно, иначе выключенный
-        // плагин оставит после себя изменённый сервер.
+        // Rules change how the world behaves: they must be cleared, or a disabled plugin would
+        // leave a modified server behind.
         paperlab.rules.LabRules.resetAll();
-        // Оставленный бот продолжал бы держать чанки и занимать мобкап.
+        // A bot left behind would keep holding chunks and taking mobcap.
         final int bots = paperlab.core.BotBridge.removeAll();
         if (bots > 0) {
             this.getLogger().info("bots removed: " + bots);
@@ -117,7 +117,7 @@ public final class PaperLabPlugin extends JavaPlugin implements Listener {
     }
 
     /**
-     * Вход: начать рукопожатие ChunkDebug и спрятать тех, кто в режиме наблюдателя.
+     * On join: start the ChunkDebug handshake and hide anyone in observer mode.
      */
     @EventHandler
     public void onJoin(final org.bukkit.event.player.PlayerJoinEvent event) {

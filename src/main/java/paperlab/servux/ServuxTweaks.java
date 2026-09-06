@@ -25,16 +25,16 @@ import org.jetbrains.annotations.NotNull;
 import paperlab.command.LabPermissions;
 
 /**
- * Канал {@code servux:tweaks} — предпросмотр инвентарей мода Tweakeroo.
+ * The {@code servux:tweaks} channel — inventory preview for the Tweakeroo mod.
  *
- * <p>Позволяет клиенту с Tweakeroo запрашивать содержимое шалкеров, сундуков и мобов
- * на расстоянии (при наведении прицела или курсора).
+ * <p>Lets a client with Tweakeroo query the contents of shulkers, chests and mobs at range, under
+ * the crosshair or the cursor.
  *
- * <p>Защита:
+ * <p>Safeguards:
  * <ul>
- *   <li>Ограничение дистанции 128 блоков (как у {@link ServuxEntities}).</li>
- *   <li>Чтение NBT других игроков требует права {@link LabPermissions#SERVUX_ENTITIES_PLAYERS}.</li>
- *   <li>Только уже загруженные чанки.</li>
+ *   <li>a 128-block distance limit (as in {@link ServuxEntities});</li>
+ *   <li>reading another player's NBT requires {@link LabPermissions#SERVUX_ENTITIES_PLAYERS};</li>
+ *   <li>loaded chunks only.</li>
  * </ul>
  */
 public final class ServuxTweaks implements PluginMessageListener {

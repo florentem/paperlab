@@ -6,6 +6,7 @@ import paperlab.counter.WoolColors;
 import paperlab.ghost.LabGhost;
 import paperlab.mobcap.MobcapService;
 import paperlab.spawn.SpawnView;
+import paperlab.text.Msg;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -20,11 +21,11 @@ import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.entity.Player;
 
 /**
- * Рисует подписки {@code /log} в футер таб-листа.
+ * Renders {@code /log} subscriptions into the tab-list footer.
  *
- * <p>Модель Carpet {@code HUDController}: обновление раз в секунду, по одной короткой
- * строке на подписку. Из плагина это делается штатным {@code Player#sendPlayerListFooter},
- * поэтому пакеты вручную собирать не нужно.
+ * <p>Carpet's {@code HUDController} model: one refresh per second, one short line per
+ * subscription. From a plugin this goes through the stock
+ * {@code Player#sendPlayerListFooter}, so no packets have to be assembled by hand.
  */
 public final class LabHud {
 
@@ -38,8 +39,8 @@ public final class LabHud {
         if (++tickCounter % PERIOD_TICKS != 0) {
             return;
         }
-        // Трасса спавна включается ровно на время подписки: без подписчиков в горячем
-        // пути движка остаётся чтение одного volatile поля.
+        // The spawn trace runs exactly as long as the subscription: with no subscribers the
+        // engine's hot path is left with a single volatile field read.
         SpawnView.setSubscribed(LabLoggers.SPAWN.hasSubscribers());
         if (!LabLoggers.anySubscribers()) {
             return;
@@ -56,15 +57,16 @@ public final class LabHud {
                 }
                 footer = footer.append(lines.get(i));
             }
-            // Если стоит TAB, ставим футер его же API: иначе anti-override перетрёт
-            // наш через тик, и подписки будут мигать. Подробности в TabBridge.
+            // If TAB is installed, set the footer through its own API: otherwise its
+            // anti-override overwrites ours a tick later and the subscriptions flicker. See
+            // TabBridge.
             if (!TabBridge.setFooter(player, footer)) {
                 player.sendPlayerListFooter(footer);
             }
         }
     }
 
-    /** Сбросить футер — при снятии последней подписки. */
+    /** Clear the footer, when the last subscription goes away. */
     public static void clear(final Player player) {
         if (!TabBridge.clear(player)) {
             player.sendPlayerListFooter(Component.empty());
@@ -90,19 +92,37 @@ public final class LabHud {
         return lines;
     }
 
+    /**
+     * The TPS line — computed and rendered exactly as in Carpet.
+     *
+     * <p>This used to be {@code Bukkit.getTPS()[0]}, which is a <b>different number</b>:
+     * Bukkit's is a one-minute rolling average, sluggish and barely moving on a short lag
+     * spike. Carpet shows the instantaneous {@code 1000 / max(target mspt, actual mspt)} —
+     * how fast the server is running right now. The discrepancy was obvious to anyone
+     * arriving from the mod, and it got in the way of comparing measurements.
+     *
+     * <p>Hence also the {@code /tick} handling: TPS is zero while frozen, and the ceiling is
+     * lifted while sprinting.
+     */
     private static Component tpsLine() {
-        final double tps = Bukkit.getTPS()[0];
-        final double mspt = Bukkit.getAverageTickTime();
-        final NamedTextColor colour = heat(mspt, 50.0D);
-        return Component.text("TPS ", NamedTextColor.GRAY)
-            .append(Component.text(String.format(Locale.ROOT, "%.1f", Math.min(tps, 20.0D)), colour))
-            .append(Component.text("  MSPT ", NamedTextColor.GRAY))
-            .append(Component.text(String.format(Locale.ROOT, "%.1f", mspt), colour));
+        final net.minecraft.server.MinecraftServer server =
+            ((org.bukkit.craftbukkit.CraftServer) Bukkit.getServer()).getServer();
+        final double mspt = server.getAverageTickTimeNanos() / 1_000_000.0D;
+        final net.minecraft.server.ServerTickRateManager ticks = server.tickRateManager();
+
+        double tps = 1000.0D / Math.max(ticks.isSprinting() ? 0.0D : ticks.millisecondsPerTick(), mspt);
+        if (ticks.isFrozen()) {
+            tps = 0.0D;
+        }
+        final String colour = Msg.heatmap(mspt, ticks.millisecondsPerTick());
+        return Msg.c(
+            "g TPS: ", String.format(Locale.US, "%s %.1f", colour, tps),
+            "g  MSPT: ", String.format(Locale.US, "%s %.1f", colour, mspt));
     }
 
     /**
-     * Локальный мобкап. По умолчанию одна строка: ник и кап монстров.
-     * Опция {@code full} добавляет строку с неудачными попытками.
+     * The local mobcap. One line by default: name and monster cap. The {@code full} option adds
+     * a line with the failed attempts.
      */
     private static List<Component> mobcapLines(final Player viewer, final String option) {
         boolean full = false;
@@ -128,27 +148,32 @@ public final class LabHud {
         final boolean local = MobcapService.perPlayerEnabled(level);
         final MobcapService.MonsterCap cap = MobcapService.monsterCap(handle, level, local);
 
-        TextComponent head = Component.text(target.getName() + "  ", NamedTextColor.GRAY)
-            .append(Component.text(cap.counted(), heat(cap.effective(), cap.limit())))
-            .append(Component.text("/" + cap.limit(), NamedTextColor.DARK_GRAY));
+        // Carpet's grammar: "current / limit", the current value on the heat scale and the
+        // limit in the category colour. The content is ours, though: Carpet's cap is world-wide,
+        // ours is per-player, and that is the whole point of this lab.
+        Component head = Msg.c(
+            "w " + target.getName() + "  ",
+            Msg.heatmap(cap.effective(), cap.limit()) + " " + cap.counted(),
+            "g  / ",
+            Msg.creatureTypeColour("monster") + " " + cap.limit());
         if (!local) {
-            head = head.append(Component.text("  global", NamedTextColor.DARK_GRAY));
+            head = head.append(Msg.c("gi  global"));
         }
         if (LabGhost.isGhost(target)) {
-            // На нашем ядре наблюдатель действительно вне переписи — число ниже честное.
-            // На чистом Paper он в перепись попадает, и это надо видеть в строке.
+            // On our core the observer really is outside the census, so the number below is
+            // honest. On stock Paper they are counted, and the line has to say so.
             head = LabGhost.full()
-                ? head.append(Component.text("  ghost", NamedTextColor.AQUA))
-                : head.append(Component.text("  ghost(partial)", NamedTextColor.RED));
+                ? head.append(Msg.c("c  ghost"))
+                : head.append(Msg.c("r  ghost(partial)"));
         }
         if (!full) {
             return List.of(head);
         }
 
-        // Строка full короткая намеренно: она висит в табе постоянно, рядом с другими
-        // подписками, и каждое лишнее слово вытесняет полезное. «+12 backoff → 17/5»
-        // читается не хуже фразы, а места занимает втрое меньше.
-        TextComponent extra = Component.text("  +", NamedTextColor.DARK_GRAY)
+        // The full line is deliberately short: it sits in the tab list permanently, next to
+        // other subscriptions, and every extra word crowds out something useful. "+12 backoff
+        // -> 17/5" reads no worse than a sentence and takes a third of the space.
+        Component extra = Component.text("  +", NamedTextColor.DARK_GRAY)
             .append(Component.text(cap.backoff(),
                 cap.backoff() > 0 ? NamedTextColor.GOLD : NamedTextColor.DARK_GRAY))
             .append(Component.text(" backoff", NamedTextColor.DARK_GRAY));
@@ -169,7 +194,7 @@ public final class LabHud {
         return List.of(head, extra);
     }
 
-    /** Счётчик воронки. Одна строка на цвет; {@code full} добавляет разбивку. */
+    /** A hopper counter. One line per colour; {@code full} adds the item breakdown. */
     private static List<Component> counterLines(final Player viewer, final String option) {
         boolean full = false;
         String colourName = null;
@@ -209,12 +234,12 @@ public final class LabHud {
         return out;
     }
 
-    /** Спавн: где останавливаются попытки. Подробности — {@link SpawnView}. */
+    /** Spawns: where the attempts stop. Details in {@link SpawnView}. */
     private static Component spawnLine(final Player viewer, final String option) {
         return SpawnView.line(viewer.getWorld(), option);
     }
 
-    /** Зелёный → жёлтый → красный по заполненности. */
+    /** Green to yellow to red, by how full it is. */
     public static NamedTextColor heat(final double value, final double max) {
         if (max <= 0.0D) {
             return NamedTextColor.DARK_GRAY;

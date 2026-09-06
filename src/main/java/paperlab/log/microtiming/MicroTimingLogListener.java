@@ -17,7 +17,7 @@ import paperlab.core.CoreBridge;
 import paperlab.counter.WoolColors;
 
 /**
- * Слушатель и мост для /log microtiming.
+ * Listener and bridge for /log microtiming.
  */
 public final class MicroTimingLogListener implements Listener {
 
@@ -110,7 +110,7 @@ public final class MicroTimingLogListener implements Listener {
         }
     }
 
-    /** Установка маркеров красителями: циклическое переключение (REGULAR -> END_ROD -> REMOVE) */
+    /** Placing dye markers: cycles through REGULAR -> END_ROD -> REMOVE. */
     @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
     public void onPlayerInteract(final PlayerInteractEvent event) {
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK || event.getClickedBlock() == null) return;
@@ -145,7 +145,7 @@ public final class MicroTimingLogListener implements Listener {
         }
     }
 
-    // Запасные слушатели для чистого Paper
+    // Fallback listeners for stock Paper.
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onRedstone(final BlockRedstoneEvent event) {
         if (CoreBridge.PRESENT || !MicroTimingLogger.hasSubscribers()) return;

@@ -13,7 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Мост и слушатель событий для /log movement.
+ * Bridge and event listener for /log movement.
  */
 public final class MovementLogListener implements Listener {
 
@@ -55,7 +55,7 @@ public final class MovementLogListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onPlayerMove(final PlayerMoveEvent event) {
-        // Запасной вариант на чистом Paper, когда ядро без патча
+        // Fallback for stock Paper, where the core carries no patch.
         if (CoreBridge.PRESENT || !MovementLogger.hasSubscribers()) return;
 
         final Location from = event.getFrom();

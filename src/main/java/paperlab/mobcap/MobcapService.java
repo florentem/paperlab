@@ -12,15 +12,14 @@ import org.bukkit.entity.SpawnCategory;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Чтение локального мобкапа Paper без изменения состояния.
+ * Reading Paper's local mobcap without changing any state.
  *
- * <p>Из плагина это возможно целиком: {@code ServerPlayer.mobCounts} и
- * {@code mobBackoffCounts} — публичные поля, {@code ChunkMap.getMobCountNear} —
- * публичный метод, а лимит берётся тем же способом, что и в
- * {@code NaturalSpawner.spawnForChunk}.
+ * <p>A plugin can do this in full: {@code ServerPlayer.mobCounts} and
+ * {@code mobBackoffCounts} are public fields, {@code ChunkMap.getMobCountNear} is a public
+ * method, and the limit is obtained the same way {@code NaturalSpawner.spawnForChunk} does it.
  *
- * <p>Не добавляет chunk tickets, не грузит чанки, не вызывает RNG. Все запросы
- * выполняются на главном потоке сервера.
+ * <p>Adds no chunk tickets, loads no chunks, consumes no RNG. Every query runs on the main
+ * server thread.
  */
 public final class MobcapService {
 
@@ -28,15 +27,15 @@ public final class MobcapService {
     }
 
     /**
-     * Кап монстров — единственная категория, которая нужна для ферм.
+     * The monster cap — the only category farms care about.
      *
-     * @param counted учтённые движком мобы
-     * @param backoff штраф за неудачные попытки спавна; это не живые мобы
-     * @param limit   действующий лимит из bukkit.yml
+     * @param counted mobs counted by the engine
+     * @param backoff penalty for failed spawn attempts; these are not live mobs
+     * @param limit   the effective limit from bukkit.yml
      */
     public record MonsterCap(int counted, int backoff, int limit) {
 
-        /** Ровно то, что движок вычитает из лимита: {@code getMobCountNear}. */
+        /** Exactly what the engine subtracts from the limit: {@code getMobCountNear}. */
         public int effective() {
             return this.counted + this.backoff;
         }
@@ -64,15 +63,16 @@ public final class MobcapService {
     }
 
     /**
-     * Кто именно ограничивает бюджет конкретного чанка.
+     * Who exactly is limiting a given chunk's budget.
      *
-     * <p>Движок берёт <b>минимальный</b> остаток среди игроков, у которых чанк попадает
-     * в {@code TICK_VIEW_DISTANCE}. Второй игрок рядом бюджет не увеличивает — он может
-     * только урезать. Именно этого не показывает штатный {@code /paper playermobcaps}.
+     * <p>The engine takes the <b>smallest</b> headroom among the players whose
+     * {@code TICK_VIEW_DISTANCE} covers the chunk. A second player nearby does not increase the
+     * budget — they can only cut it. That is precisely what the stock
+     * {@code /paper playermobcaps} does not show.
      *
-     * <p><b>Оговорка для плагина.</b> Наблюдателя мы здесь пропускаем ради вывода, но
-     * движок его всё равно учитывает: исключить игрока из переписи без правки ядра нельзя.
-     * То есть строка покажет «не ограничивает», а на деле ограничение будет.
+     * <p><b>A plugin caveat.</b> We skip an observer here for the sake of the output, but the
+     * engine still counts them: a player cannot be excluded from the census without a core
+     * patch. So the line will say "not limiting" while a limit is in fact applied.
      */
     public static LimitingPlayer limitingPlayer(final ServerLevel level,
                                                 final ChunkPos chunkPos,
@@ -110,10 +110,10 @@ public final class MobcapService {
     }
 
     /**
-     * @param playerName     ограничивающий игрок; {@code null}, если в области нет игроков
-     * @param playersInRange сколько игроков держат чанк в simulation distance
-     * @param maxSpawns      бюджет чанка; {@code <= 0} — спавна нет
-     * @param limit          действующий лимит категории
+     * @param playerName     the limiting player; {@code null} if no player is in range
+     * @param playersInRange how many players hold the chunk within simulation distance
+     * @param maxSpawns      the chunk budget; {@code <= 0} means no spawning
+     * @param limit          the effective category limit
      */
     public record LimitingPlayer(@Nullable String playerName, int playersInRange, int maxSpawns, int limit) {
 

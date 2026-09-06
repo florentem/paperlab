@@ -15,13 +15,13 @@ import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
- * Логгер микротаймингов редстоуна (/log microtiming).
+ * Redstone microtiming logger (/log microtiming).
  *
- * <p>Идентичен реализации Carpet-TIS-Addition:
+ * <p>Matches Carpet-TIS-Addition's behaviour:
  * <ul>
- *   <li>{@code merged}: группирует повторяющиеся последовательные события с {@code +Nx};</li>
- *   <li>{@code all}: выводит все события без объединения;</li>
- *   <li>{@code unique}: выводит только первое уникальное событие за игровой тик.</li>
+ *   <li>{@code merged}: groups repeated consecutive events with {@code +Nx};</li>
+ *   <li>{@code all}: prints every event without merging;</li>
+ *   <li>{@code unique}: prints only the first unique event per game tick.</li>
  * </ul>
  */
 public final class MicroTimingLogger {

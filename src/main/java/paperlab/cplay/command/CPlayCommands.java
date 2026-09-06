@@ -31,7 +31,7 @@ public final class CPlayCommands {
 
     public static LiteralArgumentBuilder<CommandSourceStack> playbackNode(final String name) {
         return Commands.literal(name)
-            .requires(source -> source.getSender().hasPermission("paperlab.cplay.playback"))
+            .requires(source -> source.getSender().hasPermission(paperlab.command.LabPermissions.CPLAY_PLAYBACK))
             .then(Commands.literal("start")
                 .then(Commands.argument("asset", StringArgumentType.word())
                     .suggests((ctx, builder) -> {
@@ -61,7 +61,7 @@ public final class CPlayCommands {
 
     public static LiteralArgumentBuilder<CommandSourceStack> captureNode(final String name) {
         return Commands.literal(name)
-            .requires(source -> source.getSender().hasPermission("paperlab.cplay.capture"))
+            .requires(source -> source.getSender().hasPermission(paperlab.command.LabPermissions.CPLAY_CAPTURE))
             .then(Commands.literal("start")
                 .then(Commands.argument("name", StringArgumentType.word())
                     .then(Commands.argument("from", ArgumentTypes.blockPosition())
@@ -77,7 +77,7 @@ public final class CPlayCommands {
 
     public static LiteralArgumentBuilder<CommandSourceStack> cplayNode(final String name) {
         return Commands.literal(name)
-            .requires(source -> source.getSender().hasPermission("paperlab.cplay"))
+            .requires(source -> source.getSender().hasPermission(paperlab.command.LabPermissions.CPLAY))
             .executes(CPlayCommands::cplayOverview)
             .then(Commands.literal("status").executes(CPlayCommands::cplayOverview))
             .then(Commands.literal("assets").executes(CPlayCommands::listAssets));

@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Map;
 import org.jetbrains.annotations.Nullable;
 
-/** Реестр логгеров {@code /log}. */
+/** Registry of {@code /log} loggers. */
 public final class LabLoggers {
 
     private static final Map<String, LabLogger> LOGGERS = new LinkedHashMap<>();
@@ -14,47 +14,49 @@ public final class LabLoggers {
     public static final LabLogger TPS = register(new LabLogger("tps", false));
 
     /**
-     * Опция — ник игрока или бота, чей локальный кап показывать. Без опции — свой.
+     * The option is the name of the player or bot whose local cap to show. With no option, your
+     * own.
      *
-     * <p>Опции измерения здесь бессмысленны: локальный кап привязан к позиции конкретного
-     * игрока, а мир берётся из того, где этот игрок находится.
+     * <p>A dimension option would be meaningless here: the local cap is tied to a specific
+     * player's position, and the world is taken from wherever that player is.
      */
     public static final LabLogger MOBCAPS = register(new LabLogger("mobcaps", true));
 
     /**
-     * Опция — цвет шерсти. Подписок может быть несколько: каждый цвет своя строка,
-     * включается и выключается независимо.
+     * The option is a wool colour. There can be several subscriptions: each colour is its own
+     * line, toggled independently.
      */
     public static final LabLogger COUNTER = register(new LabLogger("counter", true));
 
     /**
-     * Трасса спавна: где останавливаются попытки — кап, позиция, плагин, успех.
+     * The spawn trace: where attempts stop — cap, position, plugin, success.
      *
-     * <p>Опция — категория мобов ({@code monster}, {@code ambient}, …). На чистом Paper
-     * трасса урезана до «появилось / отменено», см. {@link paperlab.spawn.SpawnView}.
+     * <p>The option is a mob category ({@code monster}, {@code ambient}, …). On stock Paper the
+     * trace is reduced to "spawned / cancelled", see {@link paperlab.spawn.SpawnView}.
      */
     public static final LabLogger SPAWN = register(new LabLogger("spawn", true));
 
     /**
-     * Жизненный цикл сущностей предметов: создание, деспавн через 5 минут, уничтожение уроном.
+     * Item entity lifecycle: creation, despawn after 5 minutes, destruction by damage.
      *
-     * <p>Опции: {@code despawn}, {@code die}, {@code create}, или через запятую.
+     * <p>Options: {@code despawn}, {@code die}, {@code create}, or comma-separated.
      */
     public static final LabLogger ITEM = register(new LabLogger("item", false, "despawn",
         List.of("despawn", "die", "create", "despawn,die", "despawn,die,create")));
 
     /**
-     * Микротайминг компонентов редстоуна и событий блоков.
+     * Microtiming of redstone components and block events.
      *
-     * <p>Опции: {@code merged}, {@code all}, {@code unique}.
+     * <p>Options: {@code merged}, {@code all}, {@code unique}.
      */
     public static final LabLogger MICROTIMING = register(new LabLogger("microtiming", false, "merged",
         List.of("merged", "all", "unique")));
 
     /**
-     * Анализ этапов расчета движения сущностей (move): ограничение поршнями, сник, коллизии.
+     * Breakdown of the entity movement calculation (move): piston clamping, sneaking, collisions.
      *
-     * <p>Опция — селектор цели (например {@code non_zero:@a[distance=..10]}, {@code @s}).
+     * <p>The option is a target selector (for example {@code non_zero:@a[distance=..10]},
+     * {@code @s}).
      */
     public static final LabLogger MOVEMENT = register(new LabLogger("movement", true, "non_zero:@a[distance=..10]",
         List.of("non_zero:@a[distance=..10]", "@s", "non_zero:@e[type=creeper,distance=..5]")));
@@ -79,7 +81,7 @@ public final class LabLoggers {
         return LOGGERS.keySet();
     }
 
-    /** Снять все подписки игрока. */
+    /** Drop all of a player's subscriptions. */
     public static int unsubscribeAll(final String playerName) {
         int count = 0;
         for (final LabLogger logger : LOGGERS.values()) {
@@ -91,8 +93,8 @@ public final class LabLoggers {
     }
 
     /**
-     * Право на конкретный логгер. Нужно потому, что имя логгера — аргумент команды,
-     * а не литерал: {@code requires} на узле их не различает.
+     * The permission for one logger. Needed because a logger name is a command argument rather
+     * than a literal: {@code requires} on the node cannot tell them apart.
      */
     public static String permissionOf(final LabLogger logger) {
         if (logger == TPS) {

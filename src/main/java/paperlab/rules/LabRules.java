@@ -12,26 +12,25 @@ import org.jetbrains.annotations.Nullable;
 import paperlab.core.CoreBridge;
 
 /**
- * Реестр правил — то, что в Carpet живёт под {@code /carpet}.
+ * The rule registry — what lives under {@code /carpet} in Carpet.
  *
- * <p><b>Правило и инструмент — разные вещи.</b> Инструмент отвечает на вопрос
- * («сколько мобов в капе», «какие чанки тикают») и ничего не меняет. Правило <b>меняет
- * поведение мира</b>, и потому: по умолчанию выключено, всегда видно, что оно отличается
- * от ванильного, и не переживает перезапуск, пока об этом не попросят явно.
+ * <p><b>A rule and a tool are different things.</b> A tool answers a question ("how full is
+ * the cap", "which chunks tick") and changes nothing. A rule <b>changes how the world
+ * behaves</b>, and therefore: it is off by default, its deviation from vanilla is always
+ * visible, and it does not survive a restart unless asked explicitly.
  *
- * <p>Последнее — не перестраховка. Прогон с включённым правилом несопоставим с прогоном
- * без него, а забытое правило превращает все последующие замеры в мусор, причём молча.
- * Поэтому стенд всегда стартует в ванильном состоянии, если только значение не сохранено
- * командой {@code setDefault}.
+ * <p>The last part is not caution. A run with a rule on is not comparable to a run without
+ * it, and a forgotten rule turns every later measurement into rubbish, silently. So the lab
+ * always starts in the vanilla state unless a value was saved with {@code setDefault}.
  *
- * <p>Правила, которым нужен код в ядре, читают {@link LabRuleState}. Если ядра под нами
- * нет (чистый Paper), такие правила недоступны — {@link #available(LabRule)}.
+ * <p>Rules that need code in the core read {@link LabRuleState}. With no core underneath
+ * (stock Paper) such rules are unavailable — see {@link #available(LabRule)}.
  */
 public final class LabRules {
 
     private static final Map<String, LabRule<?>> RULES = new LinkedHashMap<>();
 
-    // --- разборщики ---
+    // --- parsers ---
 
     private static final LabRule.Parser<Boolean> BOOLEAN = raw -> {
         if ("true".equalsIgnoreCase(raw)) {
@@ -51,7 +50,7 @@ public final class LabRules {
         }
     };
 
-    /** Пустое значение задаётся словом {@code none}: пустую строку в команду не ввести. */
+    /** An empty value is written as {@code none}: an empty string cannot be typed into a command. */
     private static final LabRule.Parser<String> STRING = raw ->
         "none".equalsIgnoreCase(raw) ? "" : raw;
 
@@ -60,14 +59,14 @@ public final class LabRules {
         return text.isEmpty() ? "none" : text;
     };
 
-    // --- правила ---
+    // --- rules ---
 
     /**
-     * Суффикс к именам ботов.
+     * Suffix appended to bot names.
      *
-     * <p>Бот с именем живого игрока занимает его UUID, и сам игрок войти уже не может.
-     * С суффиксом имена расходятся, а скин по-прежнему берётся по имени <b>без</b>
-     * суффикса — бот выглядит как нужный игрок и никому не мешает.
+     * <p>A bot named after a live player takes their UUID, and that player can no longer log
+     * in. A suffix makes the names diverge while the skin is still fetched for the name
+     * <b>without</b> it — the bot looks like the intended player and blocks nobody.
      */
     public static final LabRule<String> FAKE_PLAYER_NAME_SUFFIX = register(new LabRule<>(
         "fakePlayerNameSuffix",
@@ -78,14 +77,14 @@ public final class LabRules {
         STRING,
         PLAIN::apply,
         value -> value.length() > 8 ? "a suffix longer than 8 chars leaves no room for the name" : null,
-        value -> LabRuleState.fakePlayerNameSuffix = value));
+        value -> LabRuleState.fakePlayerNameSuffix = value), "bot", "creative");
 
     /**
-     * Обновления соседей от {@code /fill}, {@code /setblock} и {@code /clone}.
+     * Neighbour updates from {@code /fill}, {@code /setblock} and {@code /clone}.
      *
-     * <p>{@code false} — блоки ставятся «тихо»: не срабатывают наблюдатели, не отваливаются
-     * факелы и репитеры, не запускается редстоун. Нужно, чтобы собрать конструкцию по
-     * шаблону и включить её один раз, а не смотреть, как она сама стартует по ходу заливки.
+     * <p>{@code false} places blocks quietly: observers do not fire, torches and repeaters do
+     * not pop off, redstone does not start. Needed to assemble a contraption from a template
+     * and switch it on once, instead of watching it start itself mid-fill.
      */
     public static final LabRule<Boolean> FILL_UPDATES = register(new LabRule<>(
         "fillUpdates",
@@ -96,9 +95,9 @@ public final class LabRules {
         BOOLEAN,
         PLAIN::apply,
         value -> null,
-        value -> LabRuleState.fillUpdates = value));
+        value -> LabRuleState.fillUpdates = value), "creative", "command");
 
-    /** Действуют ли наши дополнения к ванильному {@code /tick}. Имя как в Carpet. */
+    /** Whether our additions to vanilla {@code /tick} apply. The name follows Carpet. */
     public static final LabRule<Boolean> TICK_COMMAND_CARPETFIED = register(new LabRule<>(
         "tickCommandCarpetfied",
         "additions to vanilla /tick: toggle and warp",
@@ -108,35 +107,37 @@ public final class LabRules {
         BOOLEAN,
         PLAIN::apply,
         value -> null,
-        value -> LabRuleState.tickCommandCarpetfied = value));
+        value -> LabRuleState.tickCommandCarpetfied = value), "command", "experimental");
 
     /**
-     * Фиксированный горизонтальный угол разлёта у зажжённого динамита.
+     * Fixed horizontal launch angle for primed TNT.
      *
-     * <p>Ванильный TNT получает случайный угол, поэтому одна и та же пушка каждый раз
-     * стреляет чуть иначе и сравнивать прогоны нельзя. С фиксированным углом конструкция
-     * ведёт себя одинаково. Значение в радианах, {@code -1} — ванильное поведение.
+     * <p>Vanilla TNT gets a random angle, so the same cannon fires slightly differently every
+     * time and runs cannot be compared. With a fixed angle the contraption behaves identically.
+     * The value is in radians; {@code -1} means vanilla behaviour.
      */
     public static final LabRule<Double> HARDCODE_TNT_ANGLE = register(new LabRule<>(
         "hardcodeTNTangle",
         "fixed horizontal TNT launch angle, in radians",
         "-1 = vanilla random behaviour; otherwise 0 to 2pi",
         -1.0D,
-        List.of("-1", "0", "1.5707963", "3.1415926", "4.712389"),
+        // The options are written exactly as the rule prints a value: otherwise the current
+        // value matches no button and a duplicate like [-1.0] is appended to the list.
+        List.of("-1.0", "0.0", "1.5707963", "3.1415926", "4.712389"),
         DOUBLE,
         PLAIN::apply,
         value -> value == -1.0D || (value >= 0.0D && value < Math.PI * 2.0D)
             ? null : "must be between 0 and 2pi, or -1",
         value -> {
-            // Применяется слушателем при появлении сущности: конструктор уже отработал,
-            // но до первого тика скорость ещё никто не читал.
-        }));
+            // Applied by an entity-spawn listener: the constructor has already run, but
+            // nothing has read the velocity before the first tick.
+        }), "tnt", "creative");
 
     /**
-     * Включение сбора и вывода микротаймингов редстоуна (/log microtiming).
+     * Enables collection and output of redstone microtiming (/log microtiming).
      *
-     * <p>Как в Carpet-TIS-Addition, правило microTiming активирует трекеры для
-     * компонентов, помеченных шерстью или маркерами красителей.
+     * <p>As in Carpet-TIS-Addition, the microTiming rule activates trackers for components
+     * marked with wool or dye markers.
      */
     public static final LabRule<Boolean> MICRO_TIMING = register(new LabRule<>(
         "microTiming",
@@ -151,13 +152,13 @@ public final class LabRules {
             if (CoreBridge.PRESENT) {
                 io.papermc.paper.lab.microtiming.LabMicroTiming.enabled = value;
             }
-        }));
+        }), "redstone", "experimental");
 
     /**
-     * Независимый тикрейт, заморозка и спринт по мирам (/tick freeze, rate и т.д.).
+     * Independent tick rate, freeze and sprint per world (/tick freeze, rate and so on).
      *
-     * <p>При включении каждый мир тикает независимо со своим ServerLevelTickRateManager.
-     * При выключении все миры синхронизируются с Overworld и сервером.
+     * <p>When on, each world ticks independently with its own ServerLevelTickRateManager.
+     * When off, every world is synchronised with the overworld and the server.
      */
     public static final LabRule<Boolean> PER_WORLD_TICK = register(new LabRule<>(
         "perWorldTick",
@@ -175,14 +176,46 @@ public final class LabRules {
                     (bServer instanceof final org.bukkit.craftbukkit.CraftServer cs) ? cs.getServer() : null;
                 io.papermc.paper.lab.tick.LabPerWorldTick.setEnabled(value, server);
             }
-        }));
+        }), "tick", "experimental");
 
     private LabRules() {
     }
 
-    private static <T> LabRule<T> register(final LabRule<T> rule) {
-        RULES.put(rule.name().toLowerCase(Locale.ROOT), rule);
+    private static <T> LabRule<T> register(final LabRule<T> rule, final String... categories) {
+        RULES.put(rule.name().toLowerCase(Locale.ROOT), rule.categories(categories));
         return rule;
+    }
+
+    /** Every category in use, alphabetically. */
+    public static List<String> categories() {
+        final java.util.TreeSet<String> out = new java.util.TreeSet<>();
+        RULES.values().forEach(rule -> out.addAll(rule.categories()));
+        return List.copyOf(out);
+    }
+
+    /** Rules carrying this category. */
+    public static Collection<LabRule<?>> inCategory(final String category) {
+        final List<LabRule<?>> out = new java.util.ArrayList<>();
+        for (final LabRule<?> rule : all()) {
+            for (final String tag : rule.categories()) {
+                if (tag.equalsIgnoreCase(category)) {
+                    out.add(rule);
+                    break;
+                }
+            }
+        }
+        return out;
+    }
+
+    /** Rules that differ from vanilla. */
+    public static Collection<LabRule<?>> changed() {
+        final List<LabRule<?>> out = new java.util.ArrayList<>();
+        for (final LabRule<?> rule : all()) {
+            if (rule.changed()) {
+                out.add(rule);
+            }
+        }
+        return out;
     }
 
     public static @Nullable LabRule<?> get(final String name) {
@@ -194,11 +227,11 @@ public final class LabRules {
     }
 
     /**
-     * Доступно ли правило на этой сборке.
+     * Whether the rule is available on this build.
      *
-     * <p>Три правила из четырёх читаются кодом ядра. Без нашего ядра менять их бессмысленно:
-     * значение сохранится, а поведение не изменится — а молча не работающее правило хуже,
-     * чем отсутствующее.
+     * <p>Most rules are read by core code. Without our core, changing them is pointless: the
+     * value would be stored while the behaviour stayed the same — and a rule that silently
+     * does nothing is worse than a missing one.
      */
     public static boolean available(final LabRule<?> rule) {
         if (rule == HARDCODE_TNT_ANGLE || rule == MICRO_TIMING) {
@@ -207,7 +240,7 @@ public final class LabRules {
         return CoreBridge.PRESENT;
     }
 
-    /** Сколько правил сейчас отличается от ванильного. */
+    /** How many rules currently differ from vanilla. */
     public static int changedCount() {
         int count = 0;
         for (final LabRule<?> rule : RULES.values()) {
@@ -218,12 +251,12 @@ public final class LabRules {
         return count;
     }
 
-    /** Вернуть все правила к ванильному поведению. */
+    /** Return every rule to vanilla behaviour. */
     public static void resetAll() {
         for (final LabRule<?> rule : RULES.values()) {
             rule.reset();
         }
-        // Ядро по умолчанию «спит» — команды выключены. Возвращаем их в спящее состояние.
+        // The core is dormant by default — its commands are off. Put them back to sleep.
         if (CoreBridge.PRESENT) {
             io.papermc.paper.lab.rules.LabRuleState.playerCommandEnabled = false;
             io.papermc.paper.lab.rules.LabRuleState.tickCommandCarpetfied = false;
@@ -231,21 +264,21 @@ public final class LabRules {
     }
 
     /**
-     * Передать текущие значения всех правил в ядро. Вызывается при включении плагина,
-     * потому что ядро по умолчанию «спит»: все флаги выключены до тех пор, пока плагин
-     * явно не установит нужные значения.
+     * Push the current value of every rule into the core. Called when the plugin enables,
+     * because the core is dormant by default: every flag is off until the plugin sets the
+     * values explicitly.
      */
     public static void applyAll() {
         for (final LabRule<?> rule : RULES.values()) {
             rule.reapply();
         }
-        // Команды /player и /tick toggle|warp — включаем при наличии ядра.
+        // The /player and /tick toggle|warp commands — enabled when the core is present.
         if (CoreBridge.PRESENT) {
             io.papermc.paper.lab.rules.LabRuleState.playerCommandEnabled = true;
         }
     }
 
-    /** Применить сохранённые значения по умолчанию. Вызывается при включении плагина. */
+    /** Apply the saved default values. Called when the plugin enables. */
     public static void applyDefaults(final RuleDefaults defaults, final Consumer<String> log) {
         for (final Map.Entry<String, String> entry : defaults.all().entrySet()) {
             final LabRule<?> rule = get(entry.getKey());

@@ -12,20 +12,20 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Один счётчик: цвет шерсти в одном мире.
+ * One counter: a wool colour in one world.
  *
- * <p>Отличия от донора Leaves, каждое — исправление найденного там дефекта:
+ * <p>Differences from the Leaves reference, each fixing a defect found there:
  * <ul>
- *   <li>ключ предмета включает мету, поэтому зачарованные и именованные предметы
- *       не сливаются с обычными;</li>
- *   <li>время считается по игровым тикам мира и по <b>монотонным</b> наносекундам —
- *       перевод системных часов не портит рейт;</li>
- *   <li>при нулевом интервале рейт равен {@code null}, а не бесконечности.</li>
+ *   <li>the item key includes metadata, so enchanted and named items do not merge with plain
+ *       ones;</li>
+ *   <li>time is measured in the world's game ticks and in <b>monotonic</b> nanoseconds — moving
+ *       the system clock does not corrupt the rate;</li>
+ *   <li>with a zero interval the rate is {@code null} rather than infinity.</li>
  * </ul>
  */
 public final class LabCounter {
 
-    /** Предмет вместе с метой: два стека с разной метой считаются раздельно. */
+    /** An item together with its metadata: two stacks with different meta count separately. */
     private record ItemKey(Material material, @Nullable ItemMeta meta) {
     }
 
@@ -37,7 +37,7 @@ public final class LabCounter {
     private final Map<ItemKey, Long> counts = new LinkedHashMap<>();
     private long total;
 
-    /** {@code -1} — счётчик ещё не начинал считать. */
+    /** {@code -1} means the counter has not started counting yet. */
     private long startTick = -1L;
     private long startNanos;
 
@@ -87,15 +87,16 @@ public final class LabCounter {
         return this.startTick < 0L ? 0L : Math.max(0L, gameTime - this.startTick);
     }
 
-    /** Реальные секунды по монотонным часам — для сверки с игровым временем. */
+    /** Real seconds from the monotonic clock — for cross-checking against game time. */
     public double elapsedRealSeconds() {
         return this.startTick < 0L ? 0.0D : (System.nanoTime() - this.startNanos) / 1_000_000_000.0D;
     }
 
     /**
-     * Предметов в час по игровому времени.
+     * Items per hour by game time.
      *
-     * @return {@code null}, если интервал нулевой — делить нельзя, и выдумывать число нельзя
+     * @return {@code null} if the interval is zero — there is nothing to divide by, and inventing
+     *         a number is not an option
      */
     public @Nullable Double perHour(final long gameTime) {
         final long ticks = this.elapsedTicks(gameTime);
@@ -105,7 +106,7 @@ public final class LabCounter {
         return this.total * (double) TICKS_PER_HOUR / ticks;
     }
 
-    /** Разбивка по предметам, по убыванию количества. */
+    /** Per-item breakdown, by descending count. */
     public List<Entry> entries() {
         final List<Entry> out = new ArrayList<>(this.counts.size());
         this.counts.forEach((key, count) -> {

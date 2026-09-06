@@ -9,17 +9,17 @@ import java.util.Map;
 import java.util.logging.Logger;
 
 /**
- * Значения правил, которые переживают перезапуск.
+ * Rule values that survive a restart.
  *
- * <p><b>Почему это отдельная сущность, а не «просто сохранять текущее».</b> Правило меняет
- * поведение мира. Забытое включённое правило молча портит все последующие замеры: числа
- * получаются, выглядят правдоподобно и ни с чем не сопоставимы. Поэтому обычная установка
- * действует только до перезапуска, а чтобы значение осталось — нужно сказать об этом явно
- * командой {@code setDefault}. Так устроено и в Carpet.
+ * <p><b>Why this is a separate thing rather than "just save the current value".</b> A rule
+ * changes how the world behaves. A rule left on silently spoils every later measurement: the
+ * numbers come out plausible and comparable to nothing. So an ordinary set lasts only until the
+ * restart, and keeping a value has to be said explicitly with {@code setDefault}. Carpet works
+ * the same way.
  *
- * <p>Формат намеренно примитивный: строка {@code имя=значение} на правило. Значение
- * хранится текстом и разбирается тем же кодом, что и ввод из команды, — так сохранённое
- * и введённое руками не могут разойтись в трактовке.
+ * <p>The format is deliberately primitive: one {@code name=value} line per rule. The value is
+ * stored as text and parsed by the same code that handles command input — so a stored value and
+ * a hand-typed one cannot be interpreted differently.
  */
 public final class RuleDefaults {
 

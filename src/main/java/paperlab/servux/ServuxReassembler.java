@@ -9,25 +9,25 @@ import net.minecraft.network.FriendlyByteBuf;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Приёмная сторона разрезателя Servux.
+ * The receiving side of the Servux splitter.
  *
- * <p>Зеркало {@link ServuxSplitter}: клиент шлёт большое тело кусками, у всех кусков один
- * и тот же тип пакета, и только первый несёт {@code varint общего размера}.
+ * <p>A mirror of {@link ServuxSplitter}: the client sends a large body in chunks, every chunk
+ * carries the same packet type, and only the first one carries a {@code varint total size}.
  *
  * <pre>
- * первый кусок:  varint тип, varint общий размер, байты
- * остальные:     varint тип, байты
+ * first chunk:  varint type, varint total size, bytes
+ * the rest:     varint type, bytes
  * </pre>
  *
- * <p>Сессия сборки — на игрока и канал. Начало новой сессии узнаём по тому, что прошлая
- * закрыта: отдельного «стартового» типа в протоколе нет.
+ * <p>A reassembly session is per player and channel. A new session is recognised by the previous
+ * one being closed: the protocol has no separate "start" type.
  *
- * <p><b>Ограничение размера обязательно.</b> Тело приходит от клиента, и без предела
- * достаточно одного испорченного varint'а, чтобы сервер попытался выделить гигабайты.
+ * <p><b>A size limit is mandatory.</b> The body comes from a client, and without a bound one
+ * corrupt varint is enough to make the server try to allocate gigabytes.
  */
 public final class ServuxReassembler {
 
-    /** Столько же, сколько {@code DEFAULT_MAX_RECEIVE_SIZE_C2S} у Servux: 16 МиБ. */
+    /** Same as Servux's {@code DEFAULT_MAX_RECEIVE_SIZE_C2S}: 16 MiB. */
     private static final int MAX_TOTAL = 16 * 1024 * 1024;
 
     private static final Map<String, Session> SESSIONS = new ConcurrentHashMap<>();
@@ -45,16 +45,16 @@ public final class ServuxReassembler {
     }
 
     /**
-     * Принять кусок.
+     * Accept a chunk.
      *
-     * @return полностью собранное тело, либо {@code null}, если ждём продолжения
-     * @throws IllegalArgumentException если заявленный размер вне допустимого
+     * @return the fully reassembled body, or {@code null} if more is expected
+     * @throws IllegalArgumentException if the declared size is out of range
      */
     public static @Nullable byte[] accept(final UUID player, final String channel,
                                           final byte[] slice) {
         final String key = player + "|" + channel;
         final FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.wrappedBuffer(slice));
-        buf.readVarInt(); // тип пакета, уже разобран вызывающим
+        buf.readVarInt(); // packet type, already parsed by the caller
 
         Session session = SESSIONS.get(key);
         if (session == null) {
@@ -87,17 +87,17 @@ public final class ServuxReassembler {
     }
 
     /**
-     * Разобрать собранное тело.
+     * Parse the reassembled body.
      *
-     * <p>Формат тут <b>не тот</b>, что у мелких пакетов канала: у malilib две перегрузки
-     * записи, и большое тело приходит не сетевым NBT. Поэтому разбор терпимый,
-     * см. {@link ServuxWire#readBody}.
+     * <p>The format here is <b>not</b> the one used by the channel's small packets: malilib has
+     * two write overloads, and a large body does not arrive as network NBT. Hence the lenient
+     * parsing, see {@link ServuxWire#readBody}.
      */
     public static CompoundTag toNbt(final byte[] body, final String label) throws java.io.IOException {
         return ServuxWire.readBody(body, label);
     }
 
-    /** Забыть незавершённую сборку: при выходе игрока и при ошибке. */
+    /** Drop an unfinished reassembly: on player quit and on error. */
     public static void forget(final UUID player) {
         SESSIONS.keySet().removeIf(key -> key.startsWith(player + "|"));
     }

@@ -8,13 +8,12 @@ import java.util.UUID;
 import net.minecraft.server.level.ServerLevel;
 
 /**
- * Мягкая связь с ядром для модуля Capture & Playback.
+ * A soft link to the core for the Capture &amp; Playback module.
  *
- * <p>Если плагин запущен на обычном Paper без нашего патча ядра,
- * {@link #PRESENT} равен {@code false}. При этом все сетевые функции,
- * хранение и шаринг ассетов, сессии и коллаборативное редактирование
- * работают, но физическое воспроизведение сигналов и захват в мире
- * отключаются с понятным сообщением.
+ * <p>If the plugin runs on ordinary Paper without our core patch, {@link #PRESENT} is
+ * {@code false}. Networking, asset storage and sharing, sessions and collaborative editing all
+ * keep working, but physically replaying signals and capturing them in the world are disabled
+ * with a clear message.
  */
 public final class CPlayBridge {
 

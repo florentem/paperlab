@@ -12,34 +12,34 @@ import org.bukkit.craftbukkit.CraftWorld;
 import paperlab.core.CoreBridge;
 
 /**
- * Трасса спавна: где именно останавливаются попытки естественного появления мобов.
+ * The spawn trace: where natural spawn attempts actually stop.
  *
- * <p>Прямо отвечает на вопрос «почему ферма не спавнит». Движок не сообщает, на каком
- * шаге остановилась попытка, а причин несколько и они разные по смыслу.
+ * <p>Answers "why is the farm not spawning" directly. The engine never reports which step an
+ * attempt stopped at, and there are several reasons that mean different things.
  *
- * <h2>На нашем ядре — полная трасса</h2>
+ * <h2>On our core — the full trace</h2>
  * <pre>
- * overworld  monster  кап 133295 · проходов 184 · позиция 167 · плагин 0 · заспавнено 3
- * overworld  ambient  кап 0 · проходов 133479 · позиция 569992 · плагин 0 · заспавнено 0
+ * overworld  monster  cap 133295 · passes 184 · position 167 · plugin 0 · spawned 3
+ * overworld  ambient  cap 0 · passes 133479 · position 569992 · plugin 0 · spawned 0
  * </pre>
- * Читается сразу: у монстров всё упирается в <b>кап</b>, у ambient кап свободен, но не
- * проходит <b>позиция</b>. Ни один штатный инструмент этого не различает.
+ * It reads at a glance: monsters are limited by the <b>cap</b>, while ambient has cap headroom
+ * but fails on <b>position</b>. No stock tool distinguishes the two.
  *
- * <p><b>Единицы разные, складывать нельзя.</b> «кап» и «проходов» считаются на каждый
- * проход «чанк × категория»; «позиция», «плагин» и «заспавнено» — на каждую отдельную
- * позицию внутри прохода, а позиций за проход пробуется несколько. Поэтому «позиция»
- * законно бывает больше «проходов».
+ * <p><b>The units differ and must not be added.</b> "cap" and "passes" are counted per
+ * chunk × category pass; "position", "plugin" and "spawned" are counted per individual
+ * position within a pass, and several positions are tried per pass. So "position" legitimately
+ * exceeds "passes".
  *
- * <p>Столбец <b>«плагин»</b> — единственная причина, которой в чистом Paper быть не
- * должно. На боевом сервере это прямой ответ, режет ли что-то спавн.
+ * <p>The <b>"plugin"</b> column is the one cause that should not exist on clean Paper. On a
+ * production server it answers directly whether something is throttling spawns.
  *
- * <h2>На чистом Paper — только два факта</h2>
- * «Упёрлось в кап» и «не подошла позиция» наружу не публикуются: их видно только внутри
- * {@code NaturalSpawner}. Остаются успешное появление и отмена обработчиком —
- * см. {@link SpawnCounters}.
+ * <h2>On stock Paper — only two facts</h2>
+ * "Hit the cap" and "position rejected" are not published outwards: they are visible only
+ * inside {@code NaturalSpawner}. What remains is a successful spawn and a handler cancel —
+ * see {@link SpawnCounters}.
  *
- * <p>Сбор включается только пока кто-то подписан: при выключенной трассе в горячем пути
- * спавна остаётся чтение одного {@code volatile} поля.
+ * <p>Collection runs only while someone is subscribed: with the trace off, the hot spawn path
+ * is left with a single {@code volatile} field read.
  */
 public final class SpawnView {
 
@@ -47,20 +47,21 @@ public final class SpawnView {
     }
 
     /**
-     * Два независимых источника «включено»: подписка в таб-листе и ручное включение
-     * командой. Держать один флаг нельзя — тик HUD видит «подписчиков нет» и гасит сбор,
-     * включённый из консоли. А консоль нужна: прогон часто идёт вообще без живого игрока.
+     * Two independent sources of "on": a tab-list subscription and a manual command. One flag
+     * will not do — the HUD tick would see "no subscribers" and switch off collection that was
+     * enabled from the console. And the console is needed: a run often has no live player at
+     * all.
      */
     private static volatile boolean manual;
     private static volatile boolean subscribed;
 
-    /** Ручное включение командой {@code /carpet spawn on|off}. */
+    /** Manual switch via {@code /carpet spawn on|off}. */
     public static void setManual(final boolean enabled) {
         manual = enabled;
         apply();
     }
 
-    /** Есть ли подписчики в таб-листе. Вызывается из тика HUD. */
+    /** Whether there are tab-list subscribers. Called from the HUD tick. */
     public static void setSubscribed(final boolean value) {
         subscribed = value;
         apply();
@@ -83,7 +84,7 @@ public final class SpawnView {
         SpawnCounters.reset();
     }
 
-    /** Что подставлять в подсказки: категории мобов на ядре, причины спавна без него. */
+    /** What to suggest: mob categories with the core, spawn reasons without it. */
     public static List<String> options() {
         final List<String> out = new ArrayList<>();
         if (CoreBridge.PRESENT) {
@@ -99,7 +100,7 @@ public final class SpawnView {
         return out;
     }
 
-    /** Одна строка HUD. {@code option} — категория (на ядре) либо причина спавна. */
+    /** One HUD line. {@code option} is a category (with the core) or a spawn reason. */
     public static Component line(final World world, final String option) {
         final String arg = option == null || option.isBlank() ? null : option.trim();
         return CoreBridge.PRESENT ? Core.line(world, arg) : degraded(world, arg);
@@ -117,10 +118,10 @@ public final class SpawnView {
                 snapshot.cancelled() > 0 ? NamedTextColor.RED : NamedTextColor.DARK_GRAY));
     }
 
-    /** Делегат к ядру: на чистом Paper класс не загружается. */
+    /** Delegate to the core: on stock Paper this class is never loaded. */
     private static final class Core {
 
-        /** Категория по умолчанию: монстры — то, ради чего трассу и писали. */
+        /** Default category: monsters — what the trace was written for. */
         private static final MobCategory DEFAULT = MobCategory.MONSTER;
 
         static void setEnabled(final boolean enabled) {
@@ -163,8 +164,8 @@ public final class SpawnView {
         }
 
         /**
-         * Цвет по смыслу исхода, а не по величине: «заспавнено» хорошо, «плагин» —
-         * повод разбираться, остальное нейтрально.
+         * Colour by what the outcome means rather than by size: "spawned" is good, "plugin" is
+         * worth investigating, the rest is neutral.
          */
         private static NamedTextColor colour(
             final io.papermc.paper.lab.spawn.SpawnTrace.Outcome outcome, final long value) {

@@ -11,12 +11,12 @@ import org.bukkit.Bukkit;
 import org.bukkit.craftbukkit.CraftServer;
 
 /**
- * Перевод пакетов карты чанков в сырые байты и обратно.
+ * Turning chunk map packets into raw bytes and back.
  *
- * <p>В плагине каналы адресуются строками, потому что таков API плагинных сообщений
- * Bukkit. Побочная выгода: Bukkit сам объявляет клиенту зарегистрированные каналы через
- * {@code minecraft:register}, поэтому возиться с этим вручную, как в версии для ядра,
- * не нужно.
+ * <p>In a plugin, channels are addressed by string, because that is what Bukkit's plugin message
+ * API takes. A side benefit: Bukkit announces the registered channels to the client through
+ * {@code minecraft:register} itself, so none of that has to be done by hand as it did in the core
+ * version.
  */
 public final class ChunkMapWire {
 
@@ -27,27 +27,27 @@ public final class ChunkMapWire {
     public static final String CHUNK_DATA = ChunkMapProtocol.NAMESPACE + ":chunk_data";
     public static final String CHUNK_UNLOAD = ChunkMapProtocol.NAMESPACE + ":chunk_unload";
     /**
-     * Внимание: канал называется {@code refresh}, а не {@code chunk_refresh}.
-     * В моде это {@code ChunkDebug.id("refresh")} при классе {@code ChunkRefreshPayload} —
-     * имя класса и имя канала расходятся, и на это легко попасться.
+     * Note: the channel is called {@code refresh}, not {@code chunk_refresh}. In the mod it is
+     * {@code ChunkDebug.id("refresh")} while the class is {@code ChunkRefreshPayload} — the class
+     * name and the channel name differ, and it is easy to be caught out by that.
      */
     public static final String CHUNK_REFRESH = ChunkMapProtocol.NAMESPACE + ":refresh";
 
     /**
-     * Каналы, по которым говорит <b>клиент</b>. Их и только их нужно регистрировать
-     * входящими: Paper объявляет клиенту именно список входящих каналов, а мод шлёт
-     * серверу без проверки — ему важно лишь, чтобы сервер сообщение принял.
+     * Channels the <b>client</b> speaks on. Those and only those need registering as incoming:
+     * Paper announces the incoming channel list to the client, while the mod sends to the server
+     * without checking — all it needs is for the server to accept the message.
      */
     public static final List<String> INCOMING = List.of(
         START_WATCHING, STOP_WATCHING, CHUNK_REFRESH);
 
     /**
-     * Каналы, по которым говорит <b>сервер</b>.
+     * Channels the <b>server</b> speaks on.
      *
-     * <p>{@code hello} здесь не случайно: в протоколе он только серверный. Клиент его
-     * никогда не отправляет — он лишь ждёт его после входа. Первая версия ждала клиентского
-     * {@code hello} в ответ, и именно поэтому мод писал «ChunkDebug is unavailable»:
-     * рукопожатие не начиналось никогда.
+     * <p>{@code hello} is here for a reason: in the protocol it is clientbound only. The client
+     * never sends it — it merely waits for it after joining. The first version waited for a
+     * client {@code hello} to answer, which is exactly why the mod said "ChunkDebug is
+     * unavailable": the handshake never started.
      */
     public static final List<String> OUTGOING = List.of(
         HELLO, BYE, CHUNK_DATA, CHUNK_UNLOAD);
@@ -73,7 +73,7 @@ public final class ChunkMapWire {
         return out;
     }
 
-    // --- исходящие ---
+    // --- outgoing ---
 
     public static byte[] encodeHello(final int version) {
         final RegistryFriendlyByteBuf buf = buf();
@@ -94,10 +94,10 @@ public final class ChunkMapWire {
     }
 
     /**
-     * Выгрузка чанков: измерение и массив упакованных позиций.
+     * Chunk unloading: a dimension and an array of packed positions.
      *
-     * <p>Без этого пакета карта у клиента только растёт: его {@code updateChunks} лишь
-     * дописывает записи, а удаляет их именно {@code unloadChunks}.
+     * <p>Without this packet the client's map only grows: its {@code updateChunks} merely appends
+     * entries, and {@code unloadChunks} is what removes them.
      */
     public static byte[] encodeChunkUnload(final ResourceKey<Level> dimension,
                                            final long[] chunks) {
@@ -107,15 +107,15 @@ public final class ChunkMapWire {
         return drain(buf);
     }
 
-    // --- входящие ---
+    // --- incoming ---
 
     public static int decodeHello(final byte[] data) {
         return wrap(data).readInt();
     }
 
     /**
-     * {@code start_watching} и {@code stop_watching} несут <b>список</b> измерений,
-     * а не одно. Пустой список у {@code stop_watching} означает «прекратить всё».
+     * {@code start_watching} and {@code stop_watching} carry a <b>list</b> of dimensions, not one.
+     * An empty list on {@code stop_watching} means "stop everything".
      */
     public static List<ResourceKey<Level>> decodeDimensions(final byte[] data) {
         return ChunkMapProtocol.DIMENSIONS.decode(wrap(data));

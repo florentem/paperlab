@@ -156,18 +156,106 @@ public final class CPlayAssetStore {
         return false;
     }
 
+    /**
+     * The asset file as the mod expects to receive it.
+     *
+     * <p>Recordings made before frames moved to their own file still carry our frame format in
+     * the {@code .gsa}. Handing those bytes to a client kills the connection: the mod reads a
+     * length that is not there and its decoder throws {@code minimumReadableBytes: -1}, with
+     * nothing logged on our side. It happened on both paths that serve asset bytes — the
+     * download and the editing session — so the repair lives here, at the single point they
+     * both go through, rather than at each call site.
+     *
+     * <p>The frames are not thrown away: they are moved to where playback now looks for them.
+     */
     public byte[] getAssetData(final UUID assetUUID) {
         final CPlayAssetInfo info = getAsset(assetUUID);
         if (info == null) return null;
         final File file = getAssetFile(info);
         if (file.exists()) {
             try {
-                return Files.readAllBytes(file.toPath());
+                final byte[] data = Files.readAllBytes(file.toPath());
+                if (!looksLikeCaptureFrames(data)) {
+                    return data;
+                }
+                return repairAssetFile(assetUUID, info, data);
             } catch (final IOException e) {
                 logger.warning("Failed to read asset " + assetUUID + ": " + e.getMessage());
             }
         }
         return null;
+    }
+
+    private byte[] repairAssetFile(final UUID assetUUID, final CPlayAssetInfo info, final byte[] frames) {
+        try {
+            final File framesFile = framesFile(assetUUID);
+            if (!framesFile.exists()) {
+                atomicWrite(framesFile, frames);
+            }
+            final byte[] fixed = CPlayWire.encodeDefaultAssetFile(info);
+            atomicWrite(new File(assetsDir, assetUUID.toString() + ".gsa"), fixed);
+            logger.info("Repaired asset file for " + info.getAssetName()
+                + ": recorded frames moved out of the file the client downloads.");
+            return fixed;
+        } catch (final IOException e) {
+            logger.warning("Failed to repair asset " + assetUUID + ": " + e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Recorded signal frames, kept apart from the asset file the client sees.
+     *
+     * <p>They must not share a file. The {@code .gsa} the mod downloads has to be in the mod's
+     * own asset format; our frames are a private format of our own. Writing them over the
+     * asset file made the mod read a bogus length and drop the connection with
+     * {@code minimumReadableBytes: -1} the moment anyone opened the composition.
+     */
+    private File framesFile(final UUID assetUUID) {
+        return new File(assetsDir, assetUUID.toString() + ".frames");
+    }
+
+    public void saveCaptureFrames(final UUID assetUUID, final byte[] data) {
+        final CPlayAssetInfo info = getAsset(assetUUID);
+        if (info == null) return;
+        try {
+            atomicWrite(framesFile(assetUUID), data);
+            info.setLastModifiedTimestamp(System.currentTimeMillis());
+            saveHistory();
+        } catch (final IOException e) {
+            logger.warning("Failed to save capture frames for " + assetUUID + ": " + e.getMessage());
+        }
+    }
+
+    public byte[] getCaptureFrames(final UUID assetUUID) {
+        final File file = framesFile(assetUUID);
+        if (file.exists()) {
+            try {
+                return Files.readAllBytes(file.toPath());
+            } catch (final IOException e) {
+                logger.warning("Failed to read capture frames for " + assetUUID + ": " + e.getMessage());
+            }
+        }
+        // Assets recorded before frames moved to their own file still carry them in the .gsa.
+        final byte[] legacy = getAssetData(assetUUID);
+        return looksLikeCaptureFrames(legacy) ? legacy : null;
+    }
+
+    /**
+     * Whether these bytes are our frame format rather than the mod's asset format.
+     *
+     * <p>Used in two places: to read pre-existing recordings, and to make sure such bytes are
+     * never handed to a client.
+     */
+    public static boolean looksLikeCaptureFrames(final byte[] data) {
+        if (data == null || data.length < 8) {
+            return false;
+        }
+        final int version = ((data[0] & 0xFF) << 24) | ((data[1] & 0xFF) << 16)
+            | ((data[2] & 0xFF) << 8) | (data[3] & 0xFF);
+        final int frames = ((data[4] & 0xFF) << 24) | ((data[5] & 0xFF) << 16)
+            | ((data[6] & 0xFF) << 8) | (data[7] & 0xFF);
+        return version == 1 && frames >= 0;
     }
 
     private static void atomicWrite(final File targetFile, final byte[] data) throws IOException {
@@ -196,9 +284,9 @@ public final class CPlayAssetStore {
     public synchronized void saveHistory() {
         try {
             final byte[] encoded = CPlayWire.encodeAssetHistory(assetsByUuid.values());
-            // Пропускаем заголовок пакета (8 байт), чтобы сохранить сырой файл history.dat
+            // Skip the packet header (8 bytes) so that history.dat is stored as a raw file.
             final ByteBuf buf = Unpooled.wrappedBuffer(encoded);
-            buf.readLong(); // пропускаем packetId
+            buf.readLong(); // skip the packetId
             final byte[] raw = new byte[buf.readableBytes()];
             buf.readBytes(raw);
             atomicWrite(historyFile, raw);
@@ -233,7 +321,7 @@ public final class CPlayAssetStore {
         try {
             final byte[] encoded = CPlayWire.encodePlayerCache(playerCache.getAll());
             final ByteBuf buf = Unpooled.wrappedBuffer(encoded);
-            buf.readLong(); // пропускаем packetId
+            buf.readLong(); // skip the packetId
             final byte[] raw = new byte[buf.readableBytes()];
             buf.readBytes(raw);
             atomicWrite(playersFile, raw);

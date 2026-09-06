@@ -24,7 +24,7 @@ public final class CPlayWire {
     private CPlayWire() {
     }
 
-    // --- Базовые операции сериализации Netty ByteBuf ---
+    // --- Basic Netty ByteBuf serialisation ---
 
     public static void writeVarInt(final ByteBuf buf, int value) {
         while (true) {
@@ -98,13 +98,13 @@ public final class CPlayWire {
         return new BlockPos(x, y, z);
     }
 
-    // --- Пакеты рукопожатия и ассетов ---
+    // --- Handshake and asset packets ---
 
     public static byte[] encodeConnectionPacket() {
         final ByteBuf buf = Unpooled.buffer();
         buf.writeLong(CPlayProtocol.makePacketId(CPlayProtocol.CORE_UID, CPlayProtocol.PACKET_CORE_CONNECTION));
 
-        // 2 расширения: Core 1.6.1 и Capture & Playback 0.8.0
+        // Two extensions: Core 1.6.1 and Capture & Playback 0.8.0.
         buf.writeInt(2);
 
         // Core
@@ -314,14 +314,21 @@ public final class CPlayWire {
         }
     }
 
-    public static byte[] encodeDefaultAssetFile(final CPlayAssetInfo info) {
-        final ByteBuf buf = Unpooled.buffer();
-        // GSAssetFileHeader: version 0x81 (0x80 | 1)
+    /**
+     * GSAssetFileHeader: version 0x81 (0x80 | 1), type, created timestamp, author, and an
+     * optional player cache entry we never send.
+     */
+    public static void writeAssetFileHeader(final ByteBuf buf, final CPlayAssetInfo info) {
         buf.writeByte((byte) (0x80 | 1));
         buf.writeByte((byte) info.getTypeIndex());
         buf.writeLong(info.getCreatedTimestamp());
         writeUUID(buf, info.getCreatedByUUID());
-        buf.writeBoolean(false); // no player cache entry
+        buf.writeBoolean(false);
+    }
+
+    public static byte[] encodeDefaultAssetFile(final CPlayAssetInfo info) {
+        final ByteBuf buf = Unpooled.buffer();
+        writeAssetFileHeader(buf, info);
 
         // Asset payload
         if (info.getTypeIndex() == 0) {

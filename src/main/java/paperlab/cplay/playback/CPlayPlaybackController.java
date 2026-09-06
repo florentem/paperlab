@@ -16,8 +16,12 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import org.bukkit.entity.Player;
 import paperlab.core.CPlayBridge;
+import paperlab.cplay.CPlayService;
 import paperlab.cplay.model.CPlayAssetInfo;
 import paperlab.cplay.model.CPlayAssetType;
+import paperlab.cplay.protocol.CPlaySequenceReader;
+import paperlab.cplay.protocol.CPlaySequenceWriter;
+import paperlab.cplay.protocol.CPlayWire;
 import paperlab.cplay.storage.CPlayAssetStore;
 
 public final class CPlayPlaybackController {
@@ -36,8 +40,19 @@ public final class CPlayPlaybackController {
             return false;
         }
 
-        final byte[] data = assetStore.getAssetData(info.getAssetUUID());
-        if (data == null || data.length < 8) {
+        // The sequence is the source of truth: it is what the mod's editor shows and edits.
+        // Playing the private frame file instead would mean anything changed in the editor
+        // silently did nothing.
+        List<List<CPlaySignalEvent>> frames =
+            CPlaySequenceReader.readAssetFile(assetStore.getAssetData(info.getAssetUUID()));
+        if (frames.isEmpty()) {
+            // Recordings made before sequences were written still only have their frames.
+            final byte[] legacy = assetStore.getCaptureFrames(info.getAssetUUID());
+            if (legacy != null) {
+                frames = deserializeFrames(legacy);
+            }
+        }
+        if (frames.isEmpty()) {
             if (player != null) {
                 player.sendMessage("§cAsset contains no recorded signal data.");
             }
@@ -47,7 +62,7 @@ public final class CPlayPlaybackController {
         final SimplePlaybackStream stream = new SimplePlaybackStream(
             info.getAssetUUID(),
             new CPlayBlockRegion(-30000000, -64, -30000000, 30000000, 320, 30000000),
-            data,
+            frames,
             delay,
             repeatCount
         );
@@ -83,6 +98,11 @@ public final class CPlayPlaybackController {
         final SimpleCaptureStream stream = new SimpleCaptureStream(info.getAssetUUID(), region, assetStore);
 
         CPlayBridge.addCaptureStream(level, stream);
+        // Tell the connected clients about it. An asset created by a command is no different
+        // from one created through the mod's own button, but only the latter used to be
+        // announced - so a /capture composition appeared in the mod's table on the next join
+        // and not before.
+        CPlayService.broadcast(CPlayWire.encodeAssetInfoChanged(info), null);
         return true;
     }
 
@@ -94,6 +114,12 @@ public final class CPlayPlaybackController {
             if (stream.getAssetId().equals(assetUUID)) {
                 stream.close();
                 CPlayBridge.removeCaptureStream(level, assetUUID);
+                // close() has just written the frames, so the asset changed: announce it again
+                // or the clients keep showing the moment of creation as the last modification.
+                final CPlayAssetInfo info = assetStore.getAsset(assetUUID);
+                if (info != null) {
+                    CPlayService.broadcast(CPlayWire.encodeAssetInfoChanged(info), null);
+                }
                 return true;
             }
         }
@@ -176,10 +202,12 @@ public final class CPlayPlaybackController {
         private int currentTick = 0;
         private int currentRepeat = 0;
 
-        SimplePlaybackStream(final UUID assetId, final CPlayBlockRegion region, final byte[] data, final int delay, final int repeatCount) {
+        SimplePlaybackStream(final UUID assetId, final CPlayBlockRegion region,
+                             final List<List<CPlaySignalEvent>> frames, final int delay,
+                             final int repeatCount) {
             this.assetId = assetId;
             this.region = region;
-            this.frames = deserializeFrames(data);
+            this.frames = frames;
             this.delay = delay;
             this.repeatCount = repeatCount;
         }
@@ -239,7 +267,16 @@ public final class CPlayPlaybackController {
             closed = true;
             final byte[] data = serializeFrames(tickFrames);
             if (assetStore != null) {
-                assetStore.saveAssetData(assetId, data);
+                assetStore.saveCaptureFrames(assetId, data);
+                // And the same recording in the mod's format, so the editor shows it. Two
+                // representations of one thing is not ideal, but playback reads the frames in
+                // tick order and the mod reads spans per channel; both are written here, at the
+                // one moment the recording is finished.
+                final CPlayAssetInfo info = assetStore.getAsset(assetId);
+                if (info != null) {
+                    assetStore.saveAssetData(assetId,
+                        CPlaySequenceWriter.encodeAssetFile(info, new ArrayList<>(tickFrames)));
+                }
             }
         }
 

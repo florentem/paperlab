@@ -24,17 +24,17 @@ import org.bukkit.craftbukkit.CraftWorld;
 import org.bukkit.entity.Player;
 
 /**
- * Три инструмента из Carpet: {@code /perimeterinfo}, {@code /info}, {@code /distance}.
+ * Three tools from Carpet: {@code /perimeterinfo}, {@code /info}, {@code /distance}.
  *
- * <p>Имена и смысл — как в моде, поэтому команды отдельные, а не подкоманды
- * {@code /carpet}: правило про мышечную память касается и их.
+ * <p>Names and meanings follow the mod, which is why these are separate commands rather than
+ * {@code /carpet} subcommands: the muscle-memory rule applies to them too.
  */
 public final class LabInfoCommands {
 
-    /** Радиус сферы спавна вокруг точки. Как в Carpet и как в самом движке. */
+    /** Radius of the spawn sphere around a point. As in Carpet and in the engine itself. */
     private static final int SPAWN_RADIUS = 128;
 
-    /** Ближе этого мобы не появляются: 24 блока от игрока. */
+    /** Mobs never spawn closer than this: 24 blocks from a player. */
     private static final int MIN_SPAWN_DISTANCE = 24;
 
     public static final String PERIMETER_HELP = "spawnable spots in the spawn sphere around a point";
@@ -56,16 +56,15 @@ public final class LabInfoCommands {
     }
 
     /**
-     * Сколько в сфере спавна мест, где моб вообще может появиться.
+     * How many places in the spawn sphere a mob could appear at all.
      *
-     * <p>Отвечает на вопрос «почему ферма недобирает»: если вокруг тысячи пригодных мест,
-     * ферма конкурирует с ними за один и тот же кап, и осветить периметр важнее, чем
-     * дорабатывать саму ферму.
+     * <p>Answers "why is the farm under-producing": if thousands of eligible spots surround it,
+     * the farm competes with them for the same cap, and lighting the perimeter matters more
+     * than tuning the farm.
      *
-     * <p><b>Считаем только по загруженным чанкам.</b> Carpet здесь не стесняется и читает
-     * блоки как есть, подгружая мир; нам так нельзя — инструмент наблюдения не должен
-     * менять то, за чем наблюдает. Сколько чанков пропущено, пишем рядом с результатом,
-     * иначе число легко прочитать как полное.
+     * <p><b>Loaded chunks only.</b> Carpet has no such qualms and reads blocks as it goes,
+     * loading the world; we cannot — an observation tool must not change what it observes. The
+     * number of skipped chunks is printed next to the result, or the figure reads as complete.
      */
     private static int perimeter(final CommandSourceStack source,
                                  final io.papermc.paper.math.BlockPosition argument) {
@@ -151,7 +150,7 @@ public final class LabInfoCommands {
     }
 
     /**
-     * @return 0 — не место для спавна, 1 — в воде, 2 — на твёрдом
+     * @return 0 not a spawnable spot, 1 in water, 2 on solid ground
      */
     private static int classify(final ServerLevel level, final LevelChunk chunk,
                                 final BlockPos pos) {
@@ -168,7 +167,7 @@ public final class LabInfoCommands {
         if (below.is(Blocks.BEDROCK) || below.is(Blocks.BARRIER)) {
             return 0;
         }
-        // Тип берём зомби: он задаёт обычные требования наземного монстра, как в Carpet.
+        // Zombie is used as the type: it carries the usual ground-monster requirements, as in Carpet.
         if (NaturalSpawner.isValidEmptySpawnBlock(level, pos, state, state.getFluidState(), EntityTypes.ZOMBIE)
             && NaturalSpawner.isValidEmptySpawnBlock(level, pos.above(), above, above.getFluidState(), EntityTypes.ZOMBIE)) {
             return 2;
@@ -189,11 +188,11 @@ public final class LabInfoCommands {
     }
 
     /**
-     * Всё, что сервер знает про блок: состояние, свойства, данные тайл-энтити,
-     * запланированные тики и свет.
+     * Everything the server knows about a block: state, properties, block entity data,
+     * scheduled ticks and light.
      *
-     * <p>Отвечает на «почему этот наблюдатель не сработал»: видно и точное состояние,
-     * и то, стоит ли на блоке отложенный тик.
+     * <p>Answers "why did that observer not fire": both the exact state and whether a scheduled
+     * tick is pending on the block are visible.
      */
     private static int info(final CommandSourceStack source,
                             final io.papermc.paper.math.BlockPosition argument) {
@@ -246,8 +245,8 @@ public final class LabInfoCommands {
     public static LiteralArgumentBuilder<CommandSourceStack> distanceNode(final String name) {
         return Commands.literal(name)
             .requires(source -> source.getSender().hasPermission(LabPermissions.DISTANCE))
-            // Первый аргумент — «куда», если он один, и «откуда», если их два.
-            // Так читается естественно: /distance <точка> и /distance <откуда> <куда>.
+            // The first argument is "to" when alone and "from" when there are two. That reads
+            // naturally: /distance <point> and /distance <from> <to>.
             .then(Commands.argument("first", ArgumentTypes.blockPosition())
                 .executes(ctx -> distance(ctx.getSource(), null, resolve(ctx, "first")))
                 .then(Commands.argument("second", ArgumentTypes.blockPosition())
@@ -256,10 +255,10 @@ public final class LabInfoCommands {
     }
 
     /**
-     * Расстояние между точками: по осям, прямое и по клеткам.
+     * Distance between points: per axis, direct, and in blocks.
      *
-     * <p>С одним аргументом считает от того, кто спрашивает. Мелочь, но нужна постоянно:
-     * прикинуть, влезает ли конструкция в радиус спавна или в дистанцию деспавна.
+     * <p>With one argument it measures from whoever asked. A small thing, but needed constantly:
+     * checking whether a contraption fits inside the spawn radius or the despawn distance.
      */
     private static int distance(final CommandSourceStack source,
                                 final io.papermc.paper.math.BlockPosition from0,
@@ -288,14 +287,14 @@ public final class LabInfoCommands {
         return (int) euclid;
     }
 
-    // ---------------------------------------------------------------- общее
+    // ---------------------------------------------------------------- shared
 
     /**
-     * Достать позицию из аргумента.
+     * Extract a position from an argument.
      *
-     * <p>{@code ArgumentTypes.blockPosition()} отдаёт не готовую точку, а
-     * {@link BlockPositionResolver}: координаты могут быть относительными
-     * ({@code ~ ~ ~}), и разрешать их нужно относительно того, кто выполняет команду.
+     * <p>{@code ArgumentTypes.blockPosition()} returns a {@link BlockPositionResolver} rather
+     * than a ready position: the coordinates may be relative ({@code ~ ~ ~}) and must be
+     * resolved against whoever runs the command.
      */
     private static io.papermc.paper.math.BlockPosition resolve(
         final com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx,

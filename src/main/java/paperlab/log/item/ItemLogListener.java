@@ -10,7 +10,7 @@ import org.bukkit.event.entity.ItemDespawnEvent;
 import org.bukkit.event.entity.ItemSpawnEvent;
 
 /**
- * Слушатель событий Bukkit для /log item.
+ * Bukkit event listener for /log item.
  */
 public final class ItemLogListener implements Listener {
 

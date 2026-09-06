@@ -22,11 +22,11 @@ import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.entity.Player;
 
 /**
- * Узлы команд {@code counter}, {@code ghost}, {@code tick}, {@code chunks}.
+ * Nodes for the {@code counter}, {@code ghost}, {@code tick} and {@code chunks} commands.
  *
- * <p>Каждый метод отдаёт <b>новый</b> builder, а не готовый узел: одно и то же дерево
- * вешается дважды — отдельной командой верхнего уровня и подкомандой {@code /carpet}.
- * Переиспользовать один builder для двух регистраций нельзя.
+ * <p>Each method returns a <b>new</b> builder rather than a finished node: the same tree is
+ * attached twice — as a top-level command and as a {@code /carpet} subcommand. One builder
+ * cannot be reused for two registrations.
  */
 public final class LabMiscCommands {
 
@@ -35,7 +35,7 @@ public final class LabMiscCommands {
 
     // ------------------------------------------------------------------ counter
 
-    /** {@value} — подпись в списке команд. */
+    /** {@value} — the caption in the command list. */
     public static final String COUNTER_HELP = "hopper counters";
 
     public static LiteralArgumentBuilder<CommandSourceStack> counterNode(final String name) {
@@ -112,10 +112,22 @@ public final class LabMiscCommands {
                 NamedTextColor.DARK_GRAY));
             return 0;
         }
-        source.getSender().sendMessage(LabCounters.summary(counter, world.getGameTime(), false));
+        // Carpet's layout: a header with the total and rate, a reset button, then the items.
+        final long ticks = Math.max(counter.elapsedTicks(world.getGameTime()), 1L);
+        final Double perHour = counter.perHour(world.getGameTime());
+        source.getSender().sendMessage(paperlab.text.Msg.c(
+            "w Items for ", LabCounters.hexStyle(colour) + " " + colour.getName(),
+            String.format(java.util.Locale.ROOT, "w  (%.2f min), ", ticks / 1200.0D),
+            "w total: ", "wb " + counter.total(),
+            "w , (", "wb " + (perHour == null ? "-"
+                : String.format(java.util.Locale.ROOT, "%.1f", perHour)), "w /h):",
+            "nb  [X]", "^g reset", "!/counter " + colour.getName() + " reset"));
         for (final LabCounter.Entry entry : counter.entries()) {
-            source.getSender().sendMessage(Component.text("  " + entry.count() + "  ",
-                NamedTextColor.WHITE).append(entry.name().color(NamedTextColor.GRAY)));
+            source.getSender().sendMessage(paperlab.text.Msg.c(
+                "g - ", entry.name().color(NamedTextColor.GRAY),
+                "g : ", "wb " + entry.count(), "g , ",
+                String.format(java.util.Locale.ROOT, "wb %.1f",
+                    entry.count() * (20.0D * 60.0D * 60.0D) / ticks), "w /h"));
         }
         return 1;
     }
@@ -135,14 +147,14 @@ public final class LabMiscCommands {
 
     // -------------------------------------------------------------------- ghost
 
-    /** {@value} — подпись в списке команд. */
+    /** {@value} — the caption in the command list. */
     public static final String GHOST_HELP = "observer mode: loads no chunks, takes no mobcap";
 
     public static LiteralArgumentBuilder<CommandSourceStack> ghostNode(final String name) {
         return Commands.literal(name)
-                // Проверку «отправитель — игрок» нельзя вешать на корень: requires
-                // распространяется на всё поддерево, и ветка с ником переставала
-                // работать из консоли.
+                // The "sender is a player" check must not sit on the root: requires applies to
+                // the whole subtree, and the branch taking a name stopped working from the
+                // console.
                 .requires(source -> source.getSender().hasPermission(LabPermissions.GHOST))
                 .executes(ctx -> {
                     if (!(ctx.getSource().getSender() instanceof Player)) {
@@ -155,8 +167,8 @@ public final class LabMiscCommands {
                     player.sendMessage(Component.text(on ? "ghost on" : "ghost off",
                         on ? NamedTextColor.AQUA : NamedTextColor.DARK_GRAY));
                     if (on) {
-                        // Две вещи, о которых нужно знать до того, как строить измерение:
-                        // отложенное снятие тикетов и урезанность режима без нашего ядра.
+                        // Two things to know before building a measurement on this: ticket
+                        // release is lazy, and the mode is reduced without our core.
                         player.sendMessage(Component.text(
                             LabGhost.full()
                                 ? "  chunks stop ticking in about 30 seconds"
@@ -191,24 +203,24 @@ public final class LabMiscCommands {
     // --------------------------------------------------------------------- tick
 
     /**
-     * {@value} — подпись в списке команд.
+     * {@value} — the caption in the command list.
      *
-     * <p>Самой команды здесь нет. Узлы {@code toggle} и {@code warp} дописываются ядром
-     * прямо в ванильный {@code /tick}, как это делает Carpet; отдельного {@code /labtick}
-     * больше не существует.
+     * <p>The command itself is not here. The {@code toggle} and {@code warp} nodes are appended
+     * by the core straight into vanilla {@code /tick}, the way Carpet does it; there is no
+     * separate {@code /labtick} any more.
      */
     public static final String TICK_HELP = "tick freeze toggle, for keybinds";
 
     // ---------------------------------------------------------------- labchunks
 
-    /** {@value} — подпись в списке команд. */
+    /** {@value} — the caption in the command list. */
     public static final String CHUNKS_HELP = "chunk status summary around a player";
 
     public static LiteralArgumentBuilder<CommandSourceStack> chunksNode(final String name) {
         return Commands.literal(name)
                 .requires(source -> source.getSender().hasPermission(LabPermissions.CHUNKS))
-                // Повторное рукопожатие с клиентским модом. Нужно, если мод подключился
-                // позже входа или если права на карту выдали уже в игре.
+                // Repeat the handshake with the client mod. Needed if the mod connected after
+                // the join, or if map permissions were granted mid-game.
                 .then(Commands.literal("hello")
                     .requires(source -> source.getSender().hasPermission(LabPermissions.CHUNKMAP))
                     .executes(ctx -> hello(ctx.getSource(), null))
@@ -294,12 +306,12 @@ public final class LabMiscCommands {
 
     // --------------------------------------------------------------------- spawn
 
-    /** {@value} — подпись в списке команд. */
+    /** {@value} — the caption in the command list. */
     public static final String SPAWN_HELP = "spawn trace: where attempts stop";
 
     /**
-     * Управление трассой из консоли. В таб-листе то же самое даёт {@code /log spawn},
-     * но подписка требует живого игрока, а прогон часто идёт без него.
+     * Controlling the trace from the console. {@code /log spawn} gives the same thing in the tab
+     * list, but a subscription needs a live player and a run often has none.
      */
     public static LiteralArgumentBuilder<CommandSourceStack> spawnNode(final String name) {
         return Commands.literal(name)

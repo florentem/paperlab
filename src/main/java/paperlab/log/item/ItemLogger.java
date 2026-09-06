@@ -18,13 +18,13 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * Логгер жизненного цикла предметов (/log item).
+ * Item lifecycle logger (/log item).
  *
- * <p>Идентичен реализации Carpet-TIS-Addition:
+ * <p>Matches Carpet-TIS-Addition's behaviour:
  * <ul>
- *   <li>{@code create}: создание предмета в мире;</li>
- *   <li>{@code despawn}: естественный деспавн через 5 минут;</li>
- *   <li>{@code die}: уничтожение предмета уроном (огонь, лава, кактус, взрыв, пустота).</li>
+ *   <li>{@code create}: an item entity appears in the world;</li>
+ *   <li>{@code despawn}: natural despawn after 5 minutes;</li>
+ *   <li>{@code die}: destruction by damage (fire, lava, cactus, explosion, the void).</li>
  * </ul>
  */
 public final class ItemLogger {

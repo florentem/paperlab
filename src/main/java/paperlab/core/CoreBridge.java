@@ -1,25 +1,24 @@
 package paperlab.core;
 
 /**
- * Есть ли под плагином наш форк с минимальным патчем ядра.
+ * Whether our fork, with its minimal core patch, is underneath the plugin.
  *
- * <p>Разделение обязанностей в проекте такое: в ядре живёт <b>только то, чего
- * принципиально нельзя сделать плагином</b> — режим наблюдателя и трасса спавна.
- * Всё остальное (команды, HUD, счётчики, карта чанков, чтение мобкапа) — здесь,
- * потому что плагин пересобирается за секунды, а серверный jar за минуты.
+ * <p>The project splits responsibilities like this: the core holds <b>only what a plugin
+ * fundamentally cannot do</b> — observer mode and the spawn trace. Everything else (commands,
+ * HUD, counters, the chunk map, reading the mobcap) lives here, because a plugin rebuilds in
+ * seconds while a server jar takes minutes.
  *
- * <p>Плагин обязан работать и на чистом Paper: варианты A/B/C методики прогоняются
- * на нетронутом сервере, и инструмент не должен мешать этому прогону. Поэтому
- * зависимости от ядра «мягкие»: при отсутствии классов соответствующий модуль
- * переходит в урезанный режим и честно об этом пишет.
+ * <p>The plugin must also work on stock Paper: the A/B/C variants of a methodology are run on an
+ * untouched server, and the instrument must not get in the way of that run. So the core
+ * dependencies are soft: with the classes absent, the module in question drops to a reduced mode
+ * and says so honestly.
  *
- * <p>Ссылки на классы ядра вынесены во вложенные классы-делегаты, которые
- * загружаются только при {@link #PRESENT} — иначе на чистом Paper падало бы
- * разрешение констант при первом обращении.
+ * <p>References to core classes are moved into nested delegate classes that load only when
+ * {@link #PRESENT} — otherwise constant resolution would fail on first access on stock Paper.
  */
 public final class CoreBridge {
 
-    /** Проверяется один раз при загрузке класса: результат не меняется за время работы. */
+    /** Checked once at class load: the result cannot change while running. */
     public static final boolean PRESENT = detect();
 
     private CoreBridge() {
@@ -35,7 +34,7 @@ public final class CoreBridge {
         }
     }
 
-    /** Строка для лога и для {@code /carpet}: на чём мы сейчас работаем. */
+    /** A line for the log and for {@code /carpet}: what we are running on. */
     public static String describe() {
         return PRESENT
             ? "Lab-patched core: observer and spawn trace are complete"

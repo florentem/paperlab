@@ -12,25 +12,25 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.entity.CreatureSpawnEvent;
 
 /**
- * Счётчики появлений и отмен по причинам спавна.
+ * Counters of spawns and cancellations, by spawn reason.
  *
- * <p><b>Это урезанная версия трассы спавна.</b> В форке она различала, где именно
- * остановилась попытка: упёрлась в кап, не подошла позиция, отменил плагин, получилось.
- * Первые две причины движок наружу не публикует — их видно только внутри
- * {@code NaturalSpawner}, куда плагин попасть не может.
+ * <p><b>This is the reduced version of the spawn trace.</b> In the fork it distinguished where
+ * exactly an attempt stopped: hit the cap, position rejected, cancelled by a plugin, succeeded.
+ * The engine publishes none of the first two outwards — they are visible only inside
+ * {@code NaturalSpawner}, where a plugin cannot reach.
  *
- * <p>Что осталось доступным через Bukkit:
+ * <p>What remains available through Bukkit:
  * <ul>
- *   <li>{@code CreatureSpawnEvent} — появление состоялось;</li>
- *   <li>{@code PreCreatureSpawnEvent} с {@code isCancelled()} — появление отменено
- *       обработчиком. Именно это и нужно, чтобы поймать чужой ограничитель.</li>
+ *   <li>{@code CreatureSpawnEvent} — a spawn happened;</li>
+ *   <li>{@code PreCreatureSpawnEvent} with {@code isCancelled()} — a spawn was cancelled by a
+ *       handler. That is exactly what is needed to catch someone else's limiter.</li>
  * </ul>
  *
- * <p>Чего <b>нельзя</b> сделать из этих чисел: сказать, упирается ферма в мобкап или
- * в неподходящие позиции. Для этого нужен доступ в ядро.
+ * <p>What these numbers <b>cannot</b> tell you: whether the farm is limited by the mobcap or by
+ * unsuitable positions. That needs access to the core.
  *
- * <p>Слушатели стоят на {@code MONITOR} и ничего не меняют: счётчик не должен влиять
- * на решения других обработчиков.
+ * <p>The listeners sit on {@code MONITOR} and change nothing: a counter must not influence other
+ * handlers' decisions.
  */
 public final class SpawnCounters implements Listener {
 
@@ -40,7 +40,7 @@ public final class SpawnCounters implements Listener {
     private static final Map<Key, LongAdder> SPAWNED = new ConcurrentHashMap<>();
     private static final Map<Key, LongAdder> CANCELLED = new ConcurrentHashMap<>();
 
-    /** Итог по миру: сколько появилось и сколько отменено. */
+    /** Per-world totals: how many spawned and how many were cancelled. */
     public record Snapshot(long spawned, long cancelled) {
     }
 

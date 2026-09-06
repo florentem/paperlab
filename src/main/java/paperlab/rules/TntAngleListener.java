@@ -8,16 +8,16 @@ import org.bukkit.event.entity.EntitySpawnEvent;
 import org.bukkit.util.Vector;
 
 /**
- * Правило {@code hardcodeTNTangle}: фиксированный горизонтальный угол разлёта TNT.
+ * The {@code hardcodeTNTangle} rule: a fixed horizontal launch angle for TNT.
  *
- * <p>Ванильный зажжённый динамит получает случайный угол, поэтому одна и та же пушка
- * каждый раз стреляет чуть иначе, и два прогона нельзя сравнивать. С фиксированным углом
- * конструкция ведёт себя одинаково — это и нужно для отладки TNT-механизмов.
+ * <p>Vanilla primed TNT gets a random angle, so the same cannon fires slightly differently every
+ * time and two runs cannot be compared. With a fixed angle the contraption behaves identically —
+ * which is what debugging TNT machinery needs.
  *
- * <p><b>Почему это работает из плагина, хотя Carpet правит конструктор.</b> Скорость
- * задаётся в конструкторе {@code PrimedTnt} и до первого тика сущности никем не читается.
- * Перезапись сразу после появления даёт тот же результат, что и подмена в конструкторе.
- * Значения те же, что у Carpet: {@code (-sin(a) * 0.02, 0.2, -cos(a) * 0.02)}.
+ * <p><b>Why this works from a plugin even though Carpet patches the constructor.</b> The velocity
+ * is set in the {@code PrimedTnt} constructor and is read by nobody before the entity's first
+ * tick. Overwriting it right after the spawn gives the same result as substituting it in the
+ * constructor. The values are Carpet's: {@code (-sin(a) * 0.02, 0.2, -cos(a) * 0.02)}.
  */
 public final class TntAngleListener implements Listener {
 

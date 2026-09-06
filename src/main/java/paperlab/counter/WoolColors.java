@@ -8,12 +8,12 @@ import org.bukkit.Material;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Цвет шерсти — триггер счётчика.
+ * A wool colour — the counter's trigger.
  *
- * <p>В версии для ядра таблица строилась из {@code Blocks.WOOL.pick(DyeColor)}: в 26.2
- * отдельных полей {@code Blocks.WHITE_WOOL} больше нет. В плагине удобнее работать с
- * {@link Material}, поэтому соответствие строится по имени — {@code RED} → {@code RED_WOOL}.
- * Так при добавлении новых цветов ломаться тоже нечему.
+ * <p>In the core version the table was built from {@code Blocks.WOOL.pick(DyeColor)}: in 26.2
+ * there are no separate {@code Blocks.WHITE_WOOL} fields any more. In a plugin it is easier to
+ * work with {@link Material}, so the mapping is built by name — {@code RED} to {@code RED_WOOL}.
+ * That way nothing breaks if new colours are added either.
  */
 public final class WoolColors {
 

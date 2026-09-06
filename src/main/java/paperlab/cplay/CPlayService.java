@@ -12,6 +12,7 @@ import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
 import net.minecraft.network.protocol.common.custom.DiscardedPayload;
 import net.minecraft.resources.Identifier;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
+import paperlab.command.LabPermissions;
 import paperlab.cplay.model.CPlayAssetHandle;
 import paperlab.cplay.model.CPlayAssetInfo;
 import paperlab.cplay.model.CPlayAssetType;
@@ -22,6 +23,15 @@ import paperlab.cplay.session.CPlaySessionManager;
 import paperlab.cplay.storage.CPlayAssetStore;
 
 public final class CPlayService implements PluginMessageListener {
+
+    /**
+     * Verbose channel log, enabled with {@code -Dpaperlab.cplay.debug=true}.
+     *
+     * <p>Worth having: a malformed reply on this channel does not fail on the server at all —
+     * the client's Netty decoder throws and the connection simply drops, with nothing in our
+     * log to say which packet caused it.
+     */
+    private static final boolean DEBUG = Boolean.getBoolean("paperlab.cplay.debug");
 
     private static CPlayService instance;
 
@@ -76,6 +86,15 @@ public final class CPlayService implements PluginMessageListener {
         if (!player.isOnline()) {
             return;
         }
+        if (DEBUG && body.length >= 8) {
+            final long id = ((long) (body[0] & 0xFF) << 56) | ((long) (body[1] & 0xFF) << 48)
+                | ((long) (body[2] & 0xFF) << 40) | ((long) (body[3] & 0xFF) << 32)
+                | ((long) (body[4] & 0xFF) << 24) | ((long) (body[5] & 0xFF) << 16)
+                | ((long) (body[6] & 0xFF) << 8) | (body[7] & 0xFF);
+            org.bukkit.Bukkit.getLogger().info("[PaperLab] CPlay out: ext=0x"
+                + Integer.toHexString((int) (id >> 32)) + " sub=" + (int) id
+                + " bytes=" + body.length + " to " + player.getName());
+        }
         final var connection = ((CraftPlayer) player).getHandle().connection;
         if (connection != null) {
             connection.send(new ClientboundCustomPayloadPacket(
@@ -87,19 +106,19 @@ public final class CPlayService implements PluginMessageListener {
         if (instance == null) return;
 
         Bukkit.getGlobalRegionScheduler().runDelayed(instance.plugin, task -> {
-            if (!player.isOnline()) {
+            if (!player.isOnline() || !allowed(player)) {
                 return;
             }
 
-            // 1. Отправляем рукопожатие соединений G4mespeed в обход sendPluginMessage,
-            //    чтобы клиентский мод сразу распознал наличие сервера CPlay.
+            // 1. Send the G4mespeed connection handshake bypassing sendPluginMessage, so the
+            //    client mod recognises a CPlay server straight away.
             send(player, CPlayWire.encodeConnectionPacket());
 
-            // 2. Отправляем историю ассетов и кэш игроков
+            // 2. Send the asset history and the player cache.
             send(player, CPlayWire.encodeAssetHistory(instance.assetStore.getAllAssets()));
             send(player, CPlayWire.encodePlayerCache(instance.assetStore.getPlayerCache().getAll()));
 
-            // 3. Регистрируем игрока в кэше и объявляем остальным
+            // 3. Register the player in the cache and announce them to the rest.
             instance.assetStore.getPlayerCache().put(player.getUniqueId(), player.getName());
             Bukkit.getAsyncScheduler().runNow(instance.plugin, t -> instance.assetStore.savePlayers());
             broadcast(CPlayWire.encodePlayerCacheAdded(player.getUniqueId(), player.getName()), player);
@@ -111,10 +130,15 @@ public final class CPlayService implements PluginMessageListener {
         instance.sessionManager.onPlayerQuit(player);
     }
 
+    /** Whether to admit the player to the channel at all. */
+    private static boolean allowed(final Player player) {
+        return player.hasPermission(LabPermissions.CPLAY);
+    }
+
     public static void broadcast(final byte[] packet, final Player exclude) {
         if (instance == null) return;
         for (final Player p : Bukkit.getOnlinePlayers()) {
-            if (!p.equals(exclude)) {
+            if (!p.equals(exclude) && allowed(p)) {
                 send(p, packet);
             }
         }
@@ -125,16 +149,27 @@ public final class CPlayService implements PluginMessageListener {
         if (!CPlayProtocol.CHANNEL.equals(channel) || message.length < 8) {
             return;
         }
+        // The permission is checked at the channel entry, not only on the commands: without
+        // that, any player with the mod could create and import assets — that is, write files to
+        // the server — without ever being granted paperlab.cplay.
+        if (!allowed(player)) {
+            return;
+        }
 
         final ByteBuf buf = Unpooled.wrappedBuffer(message);
         final long packetId = buf.readLong();
         final int extensionUID = (int) (packetId >> 32L);
         final int subId = (int) packetId;
 
+        if (DEBUG) {
+            plugin.getLogger().info("CPlay in: ext=0x" + Integer.toHexString(extensionUID)
+                + " sub=" + subId + " bytes=" + message.length + " from " + player.getName());
+        }
+
         try {
             if (extensionUID == CPlayProtocol.CORE_UID) {
                 if (subId == CPlayProtocol.PACKET_CORE_CONNECTION) {
-                    // Клиент ответил своим ConnectionPacket
+                    // The client replied with its own ConnectionPacket.
                     send(player, CPlayWire.encodeAssetHistory(assetStore.getAllAssets()));
                     send(player, CPlayWire.encodePlayerCache(assetStore.getPlayerCache().getAll()));
                 }
@@ -162,7 +197,9 @@ public final class CPlayService implements PluginMessageListener {
             case CPlayProtocol.PACKET_CAPL_REQUEST_ASSET -> {
                 final UUID assetUUID = CPlayWire.readUUID(buf);
                 final CPlayAssetInfo info = assetStore.getAsset(assetUUID);
-                if (info != null && (info.hasPermission(player) || player.hasPermission("paperlab.cplay.admin"))) {
+                if (info != null && (info.hasPermission(player) || player.hasPermission(LabPermissions.CPLAY_MANAGE))) {
+                    // getAssetData repairs an old recording on the way out, so what is sent
+                    // here is always in the mod's format.
                     final byte[] data = assetStore.getAssetData(assetUUID);
                     if (data != null) {
                         send(player, CPlayWire.encodeAssetRequestResponseSuccess(data));
@@ -186,7 +223,7 @@ public final class CPlayService implements PluginMessageListener {
                 final CPlayAssetInfo info;
                 if (originalUUID != null) {
                     final CPlayAssetInfo origInfo = assetStore.getAsset(originalUUID);
-                    if (origInfo != null && (origInfo.hasPermission(player) || player.hasPermission("paperlab.cplay.admin"))) {
+                    if (origInfo != null && (origInfo.hasPermission(player) || player.hasPermission(LabPermissions.CPLAY_MANAGE))) {
                         info = assetStore.createDuplicateAsset(handle, name, origInfo, player);
                     } else {
                         return;
@@ -230,7 +267,7 @@ public final class CPlayService implements PluginMessageListener {
                 final boolean removed = buf.readBoolean();
 
                 final CPlayAssetInfo info = assetStore.getAsset(assetUUID);
-                if (info != null && (info.getOwnerUUID().equals(player.getUniqueId()) || player.hasPermission("paperlab.cplay.admin"))) {
+                if (info != null && (info.getOwnerUUID().equals(player.getUniqueId()) || player.hasPermission(LabPermissions.CPLAY_MANAGE))) {
                     if (removed) {
                         info.removeCollaborator(collabUUID);
                     } else {
@@ -241,7 +278,7 @@ public final class CPlayService implements PluginMessageListener {
                 }
             }
             default -> {
-                // Игнорируем неизвестные подтипы
+                // Unknown subtypes are ignored.
             }
         }
     }

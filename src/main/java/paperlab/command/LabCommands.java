@@ -11,34 +11,35 @@ import org.bukkit.plugin.java.JavaPlugin;
 import paperlab.core.CoreBridge;
 
 /**
- * Регистрация команд.
+ * Command registration.
  *
- * <h2>Что где лежит</h2>
- * <p>Команды, которые есть и в Carpet, называются и живут <b>так же, как там</b> —
- * отдельными командами верхнего уровня, и только там: {@code /log}, {@code /counter},
- * {@code /player}, {@code /tick}. Дублировать их подкомандами {@code /carpet} нельзя:
- * в самом моде {@code /carpet} — это команда настроек, где у каждого правила одно
- * задаваемое значение, а инструменты живут отдельно. Расхождение с модом ломает
- * мышечную память, и это дороже, чем польза от единого входа.
+ * <h2>What lives where</h2>
+ * <p>Commands that also exist in Carpet are named and placed <b>the way they are there</b> —
+ * as separate top-level commands, and only there: {@code /log}, {@code /counter},
+ * {@code /player}, {@code /tick}. Duplicating them as {@code /carpet} subcommands is not an
+ * option: in the mod {@code /carpet} is the settings command, where every rule has one
+ * settable value, while the tools live separately. Diverging from the mod breaks muscle
+ * memory, and that costs more than a single entry point is worth.
  *
- * <p>Наши собственные инструменты, которых в Carpet нет, вешаются <b>дважды</b>:
- * подкомандой {@code /carpet} — чтобы находиться табом из одной точки, — и командой
- * верхнего уровня, чтобы писать их напрямую. Это {@code ghost}, {@code spawn},
- * {@code chunks}, {@code perms}.
+ * <p>Our own tools, which Carpet does not have, are attached <b>twice</b>: as a
+ * {@code /carpet} subcommand, so the whole set tab-completes from one place, and as a
+ * top-level command, so they can be typed directly. Those are {@code ghost}, {@code spawn},
+ * {@code chunks} and {@code perms}.
  *
- * <p>Дерево строится заново для каждой регистрации: один и тот же builder переиспользовать
- * для двух корней нельзя.
+ * <p>The tree is rebuilt for each registration: the same builder cannot be reused for two
+ * roots.
  *
- * <h2>Что регистрирует ядро</h2>
- * <p>{@code /player} и дополнения к ванильному {@code /tick} регистрирует ядро: им нужны
- * ванильные типы аргументов и уже существующий узел {@code tick}. Плагин их не трогает.
+ * <h2>What the core registers</h2>
+ * <p>{@code /player} and the additions to vanilla {@code /tick} are registered by the core:
+ * they need vanilla argument types and the already existing {@code tick} node. The plugin
+ * does not touch them.
  */
 public final class LabCommands {
 
     private record Entry(String name, String help) {
     }
 
-    /** Наши инструменты — подкомандами {@code /carpet}. Порядок тот же, что в подсказке. */
+    /** Our tools as {@code /carpet} subcommands. Same order as in the overview. */
     private static final List<Entry> INDEX = List.of(
         new Entry("ghost", LabMiscCommands.GHOST_HELP),
         new Entry("spawn", LabMiscCommands.SPAWN_HELP),
@@ -46,7 +47,7 @@ public final class LabCommands {
         new Entry("cplay", paperlab.cplay.command.CPlayCommands.CPLAY_HELP),
         new Entry("perms", "permission list and which ones you have"));
 
-    /** Команды Carpet. Они отдельные; здесь только для справки в подсказке. */
+    /** Carpet's commands. They are separate; listed here only for the overview. */
     private static final List<Entry> CARPET_LIKE = List.of(
         new Entry("/log", LabLogCommand.HELP),
         new Entry("/counter", LabMiscCommands.COUNTER_HELP),
@@ -62,23 +63,24 @@ public final class LabCommands {
     }
 
     public static void register(final JavaPlugin plugin) {
+        final String version = plugin.getPluginMeta().getVersion();
         plugin.getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, event -> {
             final var registrar = event.registrar();
 
-            // /carpet — только наши инструменты и, позже, правила с одним значением.
-            // Команд Carpet здесь нет намеренно: они живут отдельно, как в самом моде.
+            // /carpet holds only our tools and, below, the single-value rules. Carpet's own
+            // commands are deliberately absent here: they live separately, as in the mod.
             final var carpet = Commands.literal("carpet")
-                .executes(ctx -> overview(ctx.getSource()))
+                .executes(ctx -> overview(ctx.getSource(), version))
                 .then(LabMiscCommands.ghostNode("ghost"))
                 .then(LabMiscCommands.spawnNode("spawn"))
                 .then(LabMiscCommands.chunksNode("chunks"))
                 .then(paperlab.cplay.command.CPlayCommands.cplayNode("cplay"))
                 .then(Commands.literal("perms").executes(ctx -> perms(ctx.getSource())));
-            // Правила — то, ради чего /carpet и существует в самом моде.
+            // Rules — what /carpet exists for in the mod itself.
             RuleCommands.attach(carpet);
             registrar.register(carpet.build(), "Technical Lab tools", List.of("lab"));
 
-            // Команды Carpet — под их собственными именами.
+            // Carpet's commands, under their own names.
             registrar.register(LabLogCommand.node("log").build(), LabLogCommand.HELP);
             registrar.register(LabMiscCommands.counterNode("counter").build(),
                 LabMiscCommands.COUNTER_HELP);
@@ -97,8 +99,8 @@ public final class LabCommands {
             registrar.register(paperlab.cplay.command.CPlayCommands.cplayNode("cplay").build(),
                 paperlab.cplay.command.CPlayCommands.CPLAY_HELP);
 
-            // Наши — ещё и верхним уровнем, чтобы писать напрямую. Имя chunks наверху
-            // занято ванилью, поэтому там префикс.
+            // Ours also at top level, so they can be typed directly. The name chunks is taken
+            // by vanilla up there, hence the prefix.
             registrar.register(LabMiscCommands.ghostNode("ghost").build(),
                 LabMiscCommands.GHOST_HELP);
             registrar.register(LabMiscCommands.spawnNode("labspawn").build(),
@@ -109,11 +111,11 @@ public final class LabCommands {
     }
 
     /**
-     * Права инструментария и то, какие из них есть у отправителя.
+     * The toolset's permissions and which of them the sender holds.
      *
-     * <p>Нужна не для проверки, а для настройки: увидеть полный список узлов, не читая
-     * исходники, и сразу понять, чего не хватает. Сами узлы зарегистрированы в Bukkit,
-     * поэтому LuckPerms подсказывает их и в своих командах.
+     * <p>Not for checking but for setup: seeing the full node list without reading the
+     * sources, and spotting at once what is missing. The nodes themselves are registered with
+     * Bukkit, so LuckPerms suggests them in its own commands too.
      */
     private static int perms(final CommandSourceStack source) {
         final var sender = source.getSender();
@@ -122,7 +124,6 @@ public final class LabCommands {
             .append(Component.text(LabPermissions.ROOT, NamedTextColor.WHITE)
                 .clickEvent(ClickEvent.suggestCommand(
                     "/lp user " + sender.getName() + " permission set " + LabPermissions.ROOT))));
-
         sender.sendMessage(Component.text("groups:", NamedTextColor.GOLD));
         for (final var group : LabPermissions.groups().entrySet()) {
             final boolean has = sender.hasPermission(group.getKey());
@@ -142,13 +143,15 @@ public final class LabCommands {
                     has ? NamedTextColor.GREEN : NamedTextColor.DARK_GRAY)
                 .append(Component.text(node.getKey(),
                     has ? NamedTextColor.WHITE : NamedTextColor.GRAY))
+                .clickEvent(ClickEvent.suggestCommand(
+                    "/lp user " + sender.getName() + " permission set " + node.getKey()))
                 .append(Component.text("  " + node.getValue(), NamedTextColor.DARK_GRAY)));
         }
         return 1;
     }
 
-    /** Короткий список: что вообще есть в этом ядре. Строки кликабельны. */
-    private static int overview(final CommandSourceStack source) {
+    /** A short list of what this build offers at all. The lines are clickable. */
+    private static int overview(final CommandSourceStack source, final String version) {
         final var sender = source.getSender();
         sender.sendMessage(Component.text("Technical Lab", NamedTextColor.AQUA)
             .append(Component.text("  " + CoreBridge.describe(), NamedTextColor.DARK_GRAY)));
@@ -159,23 +162,8 @@ public final class LabCommands {
                 .append(Component.text("  " + entry.help(), NamedTextColor.GRAY)));
         }
 
-        // Правила: показываем только изменённые. Полный список — /carpet list.
-        // Смысл в том, чтобы отклонение от ванильного было видно сразу и без запроса:
-        // именно забытое правило и портит замеры.
-        final int changed = paperlab.rules.LabRules.changedCount();
-        sender.sendMessage(Component.text("  /carpet list", NamedTextColor.WHITE)
-            .clickEvent(ClickEvent.suggestCommand("/carpet list"))
-            .append(Component.text("  rules"
-                + (changed == 0 ? " - all vanilla" : ", changed: " + changed),
-                changed == 0 ? NamedTextColor.GRAY : NamedTextColor.GOLD)));
-        for (final paperlab.rules.LabRule<?> rule : paperlab.rules.LabRules.all()) {
-            if (rule.changed()) {
-                sender.sendMessage(RuleCommands.line(rule, sender));
-            }
-        }
-
-        // Отдельные команды показываем здесь же: иначе о них никак не узнать,
-        // а подкомандами вешать нельзя — в Carpet они отдельные.
+        // The separate commands are shown here too: there is no other way to learn about
+        // them, and they cannot be attached as subcommands — in Carpet they stand alone.
         sender.sendMessage(Component.text("  Carpet-style, separate commands:",
             NamedTextColor.DARK_GRAY));
         for (final Entry entry : CARPET_LIKE) {
@@ -183,6 +171,11 @@ public final class LabCommands {
                 .clickEvent(ClickEvent.suggestCommand(entry.name() + " "))
                 .append(Component.text("  " + entry.help(), NamedTextColor.GRAY)));
         }
+
+        // What follows is exactly what /carpet prints in the mod: changed rules, version and
+        // categories. A deviation from vanilla must be visible at once and unasked: a
+        // forgotten rule is precisely what spoils measurements.
+        RuleCommands.listChanged(sender, version);
 
         return INDEX.size();
     }

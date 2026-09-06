@@ -5,19 +5,19 @@ import io.papermc.paper.command.brigadier.CommandSourceStack;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Мягкая связь с ботами, которые живут в ядре.
+ * A soft link to the bots, which live in the core.
  *
- * <p>Боты — это {@code ServerPlayer} без клиента, и им нужен {@code doTick()} в фазе
- * соединений, ровно как живому игроку. Планировщик плагина работает в начале
- * {@code tickChildren}, до фазы уровней, поэтому сделать это плагином нельзя — отсюда
- * одна строка хука в {@code MinecraftServer}.
+ * <p>Bots are {@code ServerPlayer}s without a client, and they need {@code doTick()} in the
+ * connection phase, exactly as a live player does. A plugin's scheduler runs at the start of
+ * {@code tickChildren}, before the level phase, so a plugin cannot do it — hence the one-line
+ * hook in {@code MinecraftServer}.
  *
- * <p>Само дерево {@code /player} тоже регистрирует ядро: команде нужны ванильные типы
- * аргументов ({@code Vec3Argument}, {@code RotationArgument}, {@code DimensionArgument},
- * {@code GameModeArgument}), а держать их в двух местах нечем оправдать. Плагин лишь
- * подвешивает готовый узел подкомандой {@code /carpet player}.
+ * <p>The {@code /player} tree is registered by the core as well: the command needs vanilla
+ * argument types ({@code Vec3Argument}, {@code RotationArgument}, {@code DimensionArgument},
+ * {@code GameModeArgument}), and keeping those in two places cannot be justified. The plugin
+ * merely attaches the finished node as the {@code /carpet player} subcommand.
  *
- * <p>На чистом Paper ботов просто нет, и {@code /carpet} эту строку не показывает.
+ * <p>On stock Paper there are simply no bots, and {@code /carpet} does not show that line.
  */
 public final class BotBridge {
 
@@ -37,16 +37,16 @@ public final class BotBridge {
     }
 
     /**
-     * Узел {@code /player}, зарегистрированный ядром, либо {@code null}, если ботов нет
-     * или ядро ещё не успело его зарегистрировать.
+     * The {@code /player} node registered by the core, or {@code null} if there are no bots or
+     * the core has not registered it yet.
      */
     public static @Nullable LiteralCommandNode<CommandSourceStack> node() {
         return PRESENT ? Core.node() : null;
     }
 
     /**
-     * Убрать всех ботов. Обязательно при выключении: оставленный бот продолжал бы
-     * держать чанки и занимать мобкап.
+     * Remove every bot. Mandatory on disable: a bot left behind would keep holding chunks and
+     * taking mobcap.
      */
     public static int removeAll() {
         return PRESENT ? Core.removeAll() : 0;
@@ -56,14 +56,14 @@ public final class BotBridge {
         return PRESENT ? Core.count() : 0;
     }
 
-    /** Делегат к ядру: на чистом Paper класс не загружается. */
+    /** Delegate to the core: on stock Paper this class is never loaded. */
     private static final class Core {
 
         /**
-         * Приведение обоснованно: {@code net.minecraft.commands.CommandSourceStack}
-         * реализует {@code io.papermc.paper.command.brigadier.CommandSourceStack}
-         * (через {@code PaperCommandSourceStack}), а диспетчер у ванильных и плагинных
-         * команд общий. Разные они только для компилятора.
+         * The cast is justified: {@code net.minecraft.commands.CommandSourceStack} implements
+         * {@code io.papermc.paper.command.brigadier.CommandSourceStack} (through
+         * {@code PaperCommandSourceStack}), and vanilla and plugin commands share one dispatcher.
+         * They differ only to the compiler.
          */
         @SuppressWarnings("unchecked")
         static @Nullable LiteralCommandNode<CommandSourceStack> node() {

@@ -38,7 +38,7 @@ public final class CPlaySessionManager {
             final byte[] startPacket = CPlayWire.encodeSessionStart(info, assetData);
             sendTo(player, startPacket);
 
-            // Синхронизируем уже накопленные дельты сессии
+            // Sync the deltas the session has already accumulated.
             for (final byte[] deltas : state.getDeltaHistory()) {
                 final byte[] deltaPacket = CPlayWire.encodeSessionDeltas(assetUUID, deltas);
                 sendTo(player, deltaPacket);

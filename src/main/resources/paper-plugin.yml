@@ -2,11 +2,11 @@ name: PaperLab
 version: '${version}'
 main: paperlab.PaperLabPlugin
 api-version: '26.2'
-description: Технический инструментарий для исследования ферм на Paper 26.2
+description: Technical toolset for Minecraft farm research on Paper 26.2
 authors: [ oCreker ]
 
-# Поддерживаются как встроенные боты ядра (/player), так и внешний FakePlayer-CE.
-# /log mobcaps и /ghost работают с любыми ботами (они обычные ServerPlayer).
+# Both the core's own bots (/player) and the external FakePlayer-CE are supported.
+# /log mobcaps and /ghost work with any bot, since they are ordinary ServerPlayers.
 
 dependencies:
   server:

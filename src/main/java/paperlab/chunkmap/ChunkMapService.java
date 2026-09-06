@@ -20,30 +20,29 @@ import paperlab.command.LabPermissions;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * Серверная сторона протокола ChunkDebug под готовый клиентский мод.
+ * Server side of the ChunkDebug protocol, for the existing client mod.
  *
- * <h2>Рукопожатие</h2>
- * Инициатива <b>серверная</b>: после входа игрока сервер сам шлёт {@code hello} с версией
- * протокола, и только получив его, мод включает карту. Клиент {@code hello} не отправляет
- * никогда — в моде этот канал зарегистрирован только как clientbound.
+ * <h2>Handshake</h2>
+ * The <b>server</b> starts it: after a player joins, the server sends {@code hello} with
+ * the protocol version, and only on receiving it does the mod enable the map. The client
+ * never sends {@code hello} — in the mod that channel is registered as clientbound only.
  *
- * <p>Это и была причина надписи «ChunkDebug is unavailable»: первая версия ждала
- * клиентского {@code hello}, чтобы ответить на него, и потому не отвечала никогда.
- * Объявление каналов через {@code minecraft:register} здесь ни при чём — Bukkit делает
- * это сам.
+ * <p>That was the cause of "ChunkDebug is unavailable": the first version waited for a
+ * client {@code hello} to reply to, and therefore never replied. Channel announcement via
+ * {@code minecraft:register} has nothing to do with it — Bukkit does that itself.
  *
- * <p>Отправка отложена на тик после входа: LuckPerms грузит права в том же событии, а нам
- * нужно проверить право до отправки. Так же поступает и сам мод.
+ * <p>Sending is deferred by a tick after the join: LuckPerms loads permissions in the same
+ * event, and we need the permission before sending. The mod itself does the same.
  *
- * <h2>Дельты, а не полный снимок</h2>
- * Первая версия слала полный снимок раз в секунду. Это было не только дорого — в незере
- * выходило больше двух тысяч чанков в секунду, — но и <b>неверно</b>: клиентский
- * {@code updateChunks} только дописывает в свою карту, ничего не удаляя. Выгруженный чанк
- * так и оставался на карте навсегда, пока не придёт {@code chunk_unload}.
+ * <h2>Deltas, not full snapshots</h2>
+ * The first version sent a full snapshot once a second. That was not only expensive — over
+ * two thousand chunks per second in the nether — but <b>wrong</b>: the client's
+ * {@code updateChunks} only appends to its map and removes nothing. An unloaded chunk stayed
+ * on the map forever, until a {@code chunk_unload} arrived.
  *
- * <p>Поэтому храним последнее отправленное состояние по каждому наблюдателю и шлём только
- * разницу: изменившиеся чанки в {@code chunk_data}, исчезнувшие — в {@code chunk_unload}.
- * Полный снимок уходит один раз, при подписке.
+ * <p>So we keep the last state sent to each watcher and send only the difference: changed
+ * chunks in {@code chunk_data}, vanished ones in {@code chunk_unload}. A full snapshot goes
+ * out once, on subscription.
  */
 public final class ChunkMapService implements PluginMessageListener {
 
@@ -53,8 +52,8 @@ public final class ChunkMapService implements PluginMessageListener {
     private static final Map<UUID, Set<ResourceKey<Level>>> WATCHERS = new HashMap<>();
 
     /**
-     * Что уже отправлено наблюдателю: измерение → упакованная позиция чанка → его состояние.
-     * Нужен, чтобы считать разницу; чистится вместе с подпиской.
+     * What has already been sent to a watcher: dimension -&gt; packed chunk position -&gt;
+     * its state. Used to compute the difference; cleared along with the subscription.
      */
     private static final Map<UUID, Map<ResourceKey<Level>, Map<Long, ChunkMapProtocol.ChunkInfo>>> SENT =
         new HashMap<>();
@@ -73,9 +72,9 @@ public final class ChunkMapService implements PluginMessageListener {
     }
 
     /**
-     * Начать рукопожатие с вошедшим игроком.
+     * Begin the handshake with a joining player.
      *
-     * <p>Через тик после входа: право читаем после того, как его успел загрузить LuckPerms.
+     * <p>A tick after the join: we read the permission once LuckPerms has had time to load it.
      */
     public static void onJoin(final Player player) {
         Bukkit.getGlobalRegionScheduler().runDelayed(plugin, task -> {
@@ -85,13 +84,13 @@ public final class ChunkMapService implements PluginMessageListener {
         }, 1L);
     }
 
-    /** Повторить рукопожатие — например, после выдачи прав или если карта не открылась. */
+    /** Repeat the handshake — after granting permissions, say, or if the map never opened. */
     public static void sendHello(final Player player) {
         send(player, ChunkMapWire.HELLO, ChunkMapWire.encodeHello(ChunkMapProtocol.PROTOCOL_VERSION));
-        // Диагностика отложена: список объявленных каналов приходит от клиента своим
-        // темпом, и сразу после входа он ещё пуст. На саму отправку это не влияет —
-        // hello уже ушёл, — но без этой строки «карта не работает» не отличить от
-        // «мода нет».
+        // The diagnostic is deferred: the list of announced channels arrives from the client
+        // at its own pace and is still empty right after the join. This does not affect
+        // sending — hello has already gone out — but without this line "the map does not
+        // work" is indistinguishable from "the mod is not installed".
         Bukkit.getGlobalRegionScheduler().runDelayed(plugin, task -> {
             if (!player.isOnline()) {
                 return;
@@ -103,7 +102,7 @@ public final class ChunkMapService implements PluginMessageListener {
         }, 60L);
     }
 
-    /** Отозвать доступ: мод погасит карту. */
+    /** Revoke access: the mod will blank the map. */
     public static void sendBye(final Player player) {
         WATCHERS.remove(player.getUniqueId());
         SENT.remove(player.getUniqueId());
@@ -136,13 +135,13 @@ public final class ChunkMapService implements PluginMessageListener {
                 onStopWatching(player, ChunkMapWire.decodeDimensions(message));
             }
         } catch (final Throwable t) {
-            // Испорченное тело от клиента не должно ронять обработку пакетов.
+            // A corrupt body from a client must not bring down packet handling.
             plugin.getLogger().warning("ChunkDebug: malformed packet " + channel
                 + " from " + player.getName() + ": " + t);
         }
     }
 
-    /** Клиент нажал «обновить»: шлём полный снимок по всем его измерениям. */
+    /** The client pressed refresh: send a full snapshot for all of its dimensions. */
     private void onRefresh(final Player player) {
         final Set<ResourceKey<Level>> dims = WATCHERS.get(player.getUniqueId());
         if (dims == null) {
@@ -169,7 +168,7 @@ public final class ChunkMapService implements PluginMessageListener {
         }
     }
 
-    /** Пустой список означает «прекратить всё» — так это и задумано в протоколе. */
+    /** An empty list means "stop everything" — that is how the protocol intends it. */
     private void onStopWatching(final Player player, final List<ResourceKey<Level>> dimensions) {
         if (dimensions.isEmpty()) {
             WATCHERS.remove(player.getUniqueId());
@@ -212,7 +211,7 @@ public final class ChunkMapService implements PluginMessageListener {
         }
     }
 
-    /** Полный снимок: при подписке и по кнопке «обновить». */
+    /** Full snapshot: on subscription and on the refresh button. */
     private static void sendFull(final Player player, final ServerLevel level) {
         final List<ChunkMapProtocol.ChunkInfo> chunks = ChunkMapTracker.snapshot(level, true);
         send(player, ChunkMapWire.CHUNK_DATA, ChunkMapWire.encodeChunkData(
@@ -224,7 +223,7 @@ public final class ChunkMapService implements PluginMessageListener {
         }
     }
 
-    /** Разница с прошлым разом: что изменилось и что исчезло. */
+    /** The difference from last time: what changed and what vanished. */
     private static void sendDelta(final Player player, final ServerLevel level) {
         final Map<Long, ChunkMapProtocol.ChunkInfo> previous = SENT
             .computeIfAbsent(player.getUniqueId(), key -> new HashMap<>())
@@ -271,17 +270,17 @@ public final class ChunkMapService implements PluginMessageListener {
     }
 
     /**
-     * Считается ли чанк изменившимся.
+     * Whether a chunk counts as changed.
      *
-     * <p>Обратный отсчёт ticket'а (<i>ticksLeft</i>) намеренно <b>не</b> учитывается.
-     * У отложенных тикетов он уменьшается каждый тик, и при сравнении «целиком» в дельту
-     * попадала тысяча чанков в секунду — то есть дельта переставала быть дельтой.
-     * Донорский сервер поступает так же: его трекер помечает чанк грязным при смене
-     * статуса или набора тикетов, а не при тиканье счётчика.
+     * <p>A ticket's countdown (<i>ticksLeft</i>) is deliberately <b>excluded</b>. For delayed
+     * tickets it decrements every tick, and comparing "everything" put a thousand chunks a
+     * second into the delta — at which point the delta stopped being a delta. The reference
+     * server does the same: its tracker marks a chunk dirty on a status or ticket-set change,
+     * not on a counter tick.
      *
-     * <p>Плата: цифра обратного отсчёта на карте обновляется не каждую секунду, а когда
-     * у чанка меняется что-то ещё. Для чтения карты это несущественно, а разница в
-     * трафике — на два порядка.
+     * <p>The price: the countdown shown on the map refreshes not every second but whenever
+     * something else about the chunk changes. That is immaterial for reading the map, and the
+     * traffic difference is two orders of magnitude.
      */
     private static boolean same(final ChunkMapProtocol.ChunkInfo now,
                                 final ChunkMapProtocol.ChunkInfo before) {
@@ -316,9 +315,9 @@ public final class ChunkMapService implements PluginMessageListener {
     }
 
     /**
-     * Подробный лог обмена. Включается системным свойством
-     * {@code -Dpaperlab.chunkdebug.debug=true}: без него в норме молчим, а при разборе
-     * «карта пустая» без него не обойтись — клиент об ошибках не сообщает вообще.
+     * Verbose exchange log, enabled with the system property
+     * {@code -Dpaperlab.chunkdebug.debug=true}: normally we stay quiet, but working out an
+     * empty map is impossible without it — the client never reports errors at all.
      */
     private static final boolean DEBUG =
         Boolean.getBoolean("paperlab.chunkdebug.debug");
@@ -334,17 +333,17 @@ public final class ChunkMapService implements PluginMessageListener {
     }
 
     /**
-     * Отправка в обход {@code Player#sendPluginMessage}.
+     * Sending that bypasses {@code Player#sendPluginMessage}.
      *
-     * <p>Штатный путь Bukkit молча <b>ничего не делает</b>, если клиент ещё не объявил канал
-     * через {@code minecraft:register} ({@code CraftPlayer.sendPluginMessage}: проверка
-     * {@code channels().contains(channel)}). У мода ChunkDebug объявление приходит своим
-     * темпом, и рукопожатие через тик после входа в эту проверку не укладывается —
-     * первый {@code hello} просто исчезал.
+     * <p>Bukkit's normal path silently <b>does nothing</b> if the client has not yet announced
+     * the channel via {@code minecraft:register} ({@code CraftPlayer.sendPluginMessage}, the
+     * {@code channels().contains(channel)} check). The ChunkDebug mod announces at its own
+     * pace, and a handshake one tick after the join does not fit inside that check — the
+     * first {@code hello} simply vanished.
      *
-     * <p>Сам мод шлёт и принимает без всяких проверок регистрации, поэтому кладём пакет
-     * в соединение напрямую. Тело для неизвестного серверу канала Paper хранит как есть
-     * ({@code DiscardedPayload}), кодеки регистрировать не нужно.
+     * <p>The mod itself sends and receives with no registration checks, so we put the packet
+     * straight onto the connection. Paper keeps the body of an unknown channel as-is
+     * ({@code DiscardedPayload}); no codecs need registering.
      */
     private static void send(final Player player, final String channel, final byte[] body) {
         final var connection = ((CraftPlayer) player).getHandle().connection;

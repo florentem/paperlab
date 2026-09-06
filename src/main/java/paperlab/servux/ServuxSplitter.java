@@ -9,37 +9,37 @@ import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.entity.Player;
 
 /**
- * Разрезатель больших пакетов Servux.
+ * Splitter for large Servux packets.
  *
- * <p>Данные структур и схематик не помещаются в один custom payload, поэтому Servux шлёт их
- * кусками. Формат простой и одинаковый для всех его каналов:
+ * <p>Structure and schematic data do not fit into a single custom payload, so Servux sends them
+ * in chunks. The format is simple and identical across all of its channels:
  *
  * <pre>
- * каждый кусок:  varint тип пакета
- *                varint общий размер   — только в ПЕРВОМ куске
- *                сырые байты
+ * every chunk:  varint packet type
+ *               varint total size   — in the FIRST chunk only
+ *               raw bytes
  * </pre>
  *
- * <p>Тип у всех кусков один и тот же, отдельного «начального» типа нет — клиент отличает
- * первый кусок по тому, что сессия сборки ещё не открыта. В перечислении Servux есть
- * константы {@code ..._DATA_START}, но на этом пути они не используются: легко принять их
- * за часть протокола и написать лишнее.
+ * <p>The type is the same for every chunk and there is no separate "start" type — the client
+ * recognises the first chunk by the reassembly session not being open yet. Servux's enum does
+ * contain {@code ..._DATA_START} constants, but they are not used on this path: it is easy to
+ * mistake them for part of the protocol and write code that is never needed.
  *
- * <p>Предел куска — {@code 1 МиБ − 5} байт, как у Servux. Пятёрка — запас под varint'ы.
+ * <p>The chunk limit is {@code 1 MiB - 5} bytes, as in Servux. The five is headroom for varints.
  */
 public final class ServuxSplitter {
 
-    /** Столько же, сколько {@code MAX_PAYLOAD_PER_PACKET_S2C} у Servux. */
+    /** Same as Servux's {@code MAX_PAYLOAD_PER_PACKET_S2C}. */
     private static final int MAX_SLICE = 1048576 - 5;
 
     private ServuxSplitter() {
     }
 
     /**
-     * Отправить тело кусками.
+     * Send a body in chunks.
      *
-     * @param type тип пакета, одинаковый у всех кусков
-     * @param body уже сериализованное тело
+     * @param type the packet type, identical for every chunk
+     * @param body the already serialised body
      */
     public static void send(final Player player, final String channel,
                             final int type, final byte[] body) {

@@ -30,7 +30,7 @@ public class CPlayWireTest {
 
     @Test
     public void testStringRoundTrip() {
-        final String[] testStrings = {"", "test", "Hello World!", "Привет, мир!", "§aColored §cText"};
+        final String[] testStrings = {"", "test", "Hello World!", "Hello, world!", "§aColored §cText"};
         for (final String s : testStrings) {
             final ByteBuf buf = Unpooled.buffer();
             CPlayWire.writeString(buf, s);

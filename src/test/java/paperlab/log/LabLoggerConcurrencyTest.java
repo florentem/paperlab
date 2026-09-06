@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class LabLoggerConcurrencyTest {
 
     @Test
-    @DisplayName("Многопоточный стресс-тест LabLogger: конкурентные подписки и чтение без CME")
+    @DisplayName("LabLogger concurrency stress: parallel subscribe and read without a CME")
     public void testConcurrentSubscriptionsAndIterations() throws Exception {
         final LabLogger logger = new LabLogger("test", false, "default", List.of("opt1", "opt2", "opt3"));
         final int threads = 8;
@@ -25,7 +25,7 @@ public class LabLoggerConcurrencyTest {
         final AtomicBoolean failed = new AtomicBoolean(false);
         final List<Future<?>> futures = new ArrayList<>();
 
-        // 4 пишущих потока (переключают подписки)
+        // 4 writer threads (toggling subscriptions)
         for (int i = 0; i < 4; i++) {
             final int id = i;
             futures.add(pool.submit(() -> {
@@ -45,7 +45,7 @@ public class LabLoggerConcurrencyTest {
             }));
         }
 
-        // 4 читающих потока (симулируют тики и обработку событий логгеров)
+        // 4 reader threads (simulating ticks and logger event handling)
         for (int i = 0; i < 4; i++) {
             futures.add(pool.submit(() -> {
                 try {
@@ -72,6 +72,6 @@ public class LabLoggerConcurrencyTest {
         }
         pool.shutdown();
 
-        assertFalse(failed.get(), "Многопоточный тест подписок обязан пройти без ConcurrentModificationException");
+        assertFalse(failed.get(), "the subscription concurrency test must pass without a ConcurrentModificationException");
     }
 }

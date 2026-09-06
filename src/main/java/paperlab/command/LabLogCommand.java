@@ -8,42 +8,46 @@ import io.papermc.paper.command.brigadier.Commands;
 import paperlab.log.LabHud;
 import paperlab.log.LabLogger;
 import paperlab.log.LabLoggers;
+import paperlab.text.Msg;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * {@code /log} — подписки HUD, как в Carpet.
+ * {@code /log} — HUD subscriptions, as in Carpet.
  *
  * <pre>
- * /log                        что есть и на что подписан
- * /log tps                    вкл/выкл
- * /log mobcaps [ник] [full]
- * /log counter &lt;цвет&gt; [full]
- * /log spawn [причина]
- * /log &lt;имя&gt; clear            снять подписки этого логгера
- * /log clear                  снять всё
+ * /log                        what exists and what you are subscribed to
+ * /log tps                    toggle
+ * /log mobcaps [name] [full]
+ * /log counter &lt;colour&gt; [full]
+ * /log spawn [reason]
+ * /log &lt;name&gt; clear           drop this logger's subscriptions
+ * /log clear                  drop everything
  * </pre>
  *
- * Подписок на один логгер может быть несколько — по одной на цель. Повторная команда
- * с той же целью выключает её, с другим флагом — заменяет.
+ * A logger can hold several subscriptions, one per target. Repeating the command with the same
+ * target turns it off; with a different flag, replaces it.
+ *
+ * <p>Text and layout come from Carpet Mod (MIT, (c) gnembon), see THIRD-PARTY.md.
  */
 public final class LabLogCommand {
 
     private LabLogCommand() {
     }
 
-    /** {@value} — подпись в списке команд. */
+    /** {@value} — the caption in the command list. */
     public static final String HELP = "tab-list subscriptions";
 
     public static LiteralArgumentBuilder<CommandSourceStack> node(final String name) {
         return Commands.literal(name)
-                .requires(source -> source.getSender() instanceof Player
-                    && source.getSender().hasPermission(LabPermissions.LOG))
+                // The console sees the command but gets "For players only", as in Carpet.
+                // Hiding it from the tree would be easier for us and more confusing for someone
+                // looking for it in the list and not finding it.
+                .requires(source -> source.getSender().hasPermission(LabPermissions.LOG))
                 .executes(ctx -> list(ctx.getSource()))
                 .then(Commands.literal("clear").executes(ctx -> clearAll(ctx.getSource())))
                 .then(
@@ -114,80 +118,142 @@ public final class LabLogCommand {
         return opts;
     }
 
+    /**
+     * The logger list — Carpet's layout: separator, header, one line per logger with option
+     * buttons and an unsubscribe cross.
+     *
+     * <p>There is exactly one difference from Carpet, and it comes from our subscription model:
+     * Carpet has one option per logger, we can have several (mobcaps of several players at
+     * once). So <b>every</b> active option is highlighted green, not just one.
+     */
     private static int list(final CommandSourceStack source) {
-        final Player player = (Player) source.getSender();
-        Component line = Component.empty();
-        boolean first = true;
+        if (!(source.getSender() instanceof final Player player)) {
+            Msg.m(source.getSender(), "w For players only");
+            return 0;
+        }
+        Msg.m(player, "w _____________________");
+        Msg.m(player, "w Available logging options:");
         for (final LabLogger logger : LabLoggers.all()) {
             if (!player.hasPermission(LabLoggers.permissionOf(logger))) {
                 continue;
             }
-            if (!first) {
-                line = line.append(Component.text("  "));
-            }
-            first = false;
-            final var options = logger.optionsFor(player.getName());
-            if (options.isEmpty()) {
-                line = line.append(Component.text(logger.name(), NamedTextColor.DARK_GRAY));
-                continue;
-            }
-            boolean firstOption = true;
-            for (final String option : options) {
-                if (!firstOption) {
-                    line = line.append(Component.text(" "));
+            final String name = logger.name();
+            final Collection<String> active = logger.optionsFor(player.getName());
+            final boolean subscribed = !active.isEmpty();
+            final String colour = subscribed ? "w" : "g";
+
+            final List<Object> comp = new ArrayList<>();
+            comp.add("w  - " + name + ": ");
+
+            final List<String> buttons = buttons(logger, active);
+            if (buttons.isEmpty()) {
+                if (subscribed) {
+                    comp.add("l Subscribed ");
+                } else {
+                    comp.add(colour + " [Subscribe] ");
+                    comp.add("^w subscribe to " + name);
+                    comp.add("!/log " + name);
                 }
-                firstOption = false;
-                line = line.append(Component.text(label(logger, option), NamedTextColor.GREEN));
+            } else {
+                for (final String option : buttons) {
+                    if (containsIgnoreCase(active, option)) {
+                        comp.add("l [" + option + "] ");
+                    } else {
+                        comp.add(colour + " [" + option + "] ");
+                        comp.add("^w subscribe to " + name + " " + option);
+                        comp.add("!/log " + name + " " + option);
+                    }
+                }
             }
+            if (subscribed) {
+                comp.add("nb [X]");
+                comp.add("^w Click to unsubscribe");
+                comp.add("!/log " + name + " clear");
+            }
+            Msg.m(player, comp.toArray());
         }
-        player.sendMessage(line);
         return 1;
     }
 
+    /**
+     * Which buttons to show for a logger: its options plus any active subscription that is not
+     * in the option list.
+     *
+     * <p>The second part is not a detail: for mobcaps the target is a player name, which no
+     * list can anticipate, and without this your own subscription would have no off button.
+     */
+    private static List<String> buttons(final LabLogger logger, final Collection<String> active) {
+        final List<String> out = new ArrayList<>();
+        for (final String option : suggestions(logger.name())) {
+            if (!option.equals("clear") && !containsIgnoreCase(out, option)) {
+                out.add(option);
+            }
+        }
+        for (final String option : active) {
+            if (!containsIgnoreCase(out, option)) {
+                out.add(option);
+            }
+        }
+        return out;
+    }
+
+    private static boolean containsIgnoreCase(final Collection<String> haystack, final String needle) {
+        for (final String candidate : haystack) {
+            if (candidate.equalsIgnoreCase(needle)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static int toggle(final CommandContext<CommandSourceStack> ctx, final @Nullable String option) {
-        final Player player = (Player) ctx.getSource().getSender();
+        if (!(ctx.getSource().getSender() instanceof final Player player)) {
+            Msg.m(ctx.getSource().getSender(), "w For players only");
+            return 0;
+        }
         final String loggerName = StringArgumentType.getString(ctx, "name");
 
         final LabLogger logger = LabLoggers.get(loggerName);
         if (logger == null) {
-            player.sendMessage(Component.text("no such logger: " + loggerName, NamedTextColor.RED));
+            Msg.m(player, "r Unknown logger: ", "rb " + loggerName);
             return 0;
         }
-        // Логгер — аргумент, а не литерал, поэтому право проверяется здесь, а не в requires.
+        // The logger is an argument rather than a literal, so the permission is checked here
+        // rather than in requires.
         final String permission = LabLoggers.permissionOf(logger);
         if (!player.hasPermission(permission)) {
-            player.sendMessage(Component.text("missing permission: " + permission, NamedTextColor.RED));
+            Msg.m(player, "r Missing permission: ", "rb " + permission);
             return 0;
         }
 
         if (option != null && option.equalsIgnoreCase("clear")) {
             logger.unsubscribeAll(player.getName());
             refresh(player);
-            player.sendMessage(Component.text(logger.name() + " off", NamedTextColor.DARK_GRAY));
+            Msg.m(player, "gi Unsubscribed from " + logger.name());
             return 1;
         }
 
         final boolean on = logger.toggle(player.getName(), option);
         refresh(player);
-        final String text = label(logger, option == null ? "" : option);
-        player.sendMessage(Component.text(text + (on ? " on" : " off"),
-            on ? NamedTextColor.GREEN : NamedTextColor.DARK_GRAY));
+        final String suffix = option == null || option.isBlank() ? "" : "(" + option + ")";
+        Msg.m(player, "gi " + (on ? "Subscribed to " : "Unsubscribed from ")
+            + logger.name() + suffix);
         return 1;
     }
 
     private static int clearAll(final CommandSourceStack source) {
-        final Player player = (Player) source.getSender();
+        if (!(source.getSender() instanceof final Player player)) {
+            Msg.m(source.getSender(), "w For players only");
+            return 0;
+        }
         LabLoggers.unsubscribeAll(player.getName());
         LabHud.clear(player);
-        player.sendMessage(Component.text("off", NamedTextColor.DARK_GRAY));
+        Msg.m(player, "gi Unsubscribed from all logs");
         return 1;
     }
 
-    private static String label(final LabLogger logger, final String option) {
-        return option.isEmpty() ? logger.name() : logger.name() + ":" + option.replace(' ', '/');
-    }
 
-    /** Если подписок больше нет — убрать футер сразу. */
+    /** If no subscriptions remain, clear the footer at once. */
     private static void refresh(final Player player) {
         for (final LabLogger logger : LabLoggers.all()) {
             if (logger.subscribed(player.getName())) {

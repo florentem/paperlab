@@ -26,56 +26,57 @@ import net.minecraft.world.level.block.state.properties.RailShape;
 import net.minecraft.world.level.block.state.properties.StairsShape;
 
 /**
- * Установка схематики Litematica на сервере.
+ * Server-side placement of a Litematica schematic.
  *
- * <p>Порядок преобразований, распаковка блоков и флаги установки воспроизведены по
- * <b>клиентскому</b> коду Litematica ({@code LitematicaSchematic.placeBlocksToWorld},
- * {@code PositionUtils}, {@code LitematicaBitArray}). Иначе нельзя: расхождение здесь
- * не ломается заметно, а тихо сдвигает или разворачивает постройку.
+ * <p>The transform order, block unpacking and placement flags are reproduced from
+ * Litematica's <b>client</b> code ({@code LitematicaSchematic.placeBlocksToWorld},
+ * {@code PositionUtils}, {@code LitematicaBitArray}). There is no other way: a mismatch
+ * here does not break visibly, it quietly shifts or rotates the build.
  *
- * <h2>Что уже переносится</h2>
- * Блоки, палитра, повороты и отражения (в том числе у подрегионов), режим замены,
- * данные тайл-энтити и сущности. Флаг {@code IgnoreEntities} уважается и на уровне
- * запроса, и на уровне подрегиона.
+ * <h2>What is carried across</h2>
+ * Blocks, palette, rotations and mirroring (subregions included), replace mode, block
+ * entity data and entities. The {@code IgnoreEntities} flag is honoured both at request
+ * level and at subregion level.
  *
- * <h2>Про обновления соседей</h2>
- * Блоки ставятся с флагами {@code 0x12} — как это делает сама Litematica:
- * клиентам сообщаем, соседей не трогаем. Это ровно то поведение, ради которого
- * существует правило {@code fillUpdates}: конструкция не должна запускаться по ходу
- * укладки.
+ * <h2>On neighbour updates</h2>
+ * Blocks are placed with flags {@code 0x12}, the way Litematica itself does it: tell the
+ * clients, leave the neighbours alone. That is exactly the behaviour the {@code fillUpdates}
+ * rule exists for — a contraption must not start up while it is still being laid out.
  */
 public final class LitematicaPaste {
 
     /**
-     * Флаги установки: показать клиентам и <b>не давать блоку менять себя при установке</b>.
+     * Placement flags: tell the clients and <b>do not let the block rewrite itself on
+     * placement</b>.
      *
-     * <p>{@code UPDATE_CLIENTS | UPDATE_SKIP_ALL_SIDEEFFECTS}, то есть
+     * <p>{@code UPDATE_CLIENTS | UPDATE_SKIP_ALL_SIDEEFFECTS}, that is
      * {@code 2 | 16 | 32 | 256 | 512}.
      *
-     * <p>Ключевой здесь — {@code UPDATE_SKIP_ON_PLACE} (512). Без него
-     * {@code LevelChunk.setBlockState} зовёт {@code state.onPlace}, а у редстоуновой пыли
-     * это {@code updatePowerStrength}: она пересчитывает сигнал по соседям и <b>перезаписывает
-     * собственное состояние</b>. Схематика с горящей пылью встаёт погашенной, и конструкция
-     * стартует сама — ровно то, что мы увидели на первой рабочей вставке.
+     * <p>The critical one is {@code UPDATE_SKIP_ON_PLACE} (512). Without it
+     * {@code LevelChunk.setBlockState} calls {@code state.onPlace}, and for redstone dust
+     * that is {@code updatePowerStrength}: it recomputes the signal from the neighbours and
+     * <b>overwrites its own state</b>. A schematic with powered dust comes out unpowered
+     * and the contraption starts itself — exactly what we saw on the first working paste.
      *
-     * <p>Флаги {@code Litematica} ({@code 0x12}) от этого не спасают: они гасят обновления
-     * соседей, но не {@code onPlace}. У клиента это не так заметно, потому что там за
-     * вставкой обычно идут команды, которые всё равно всё пересчитывают.
+     * <p>Litematica's own flags ({@code 0x12}) do not save you here: they suppress neighbour
+     * updates but not {@code onPlace}. On the client it is less noticeable, because a paste
+     * there is usually followed by commands that recompute everything anyway.
      *
-     * <p>{@code UPDATE_SUPPRESS_DROPS} (32) заодно не даёт заменяемым блокам сыпаться
-     * предметами, а {@code UPDATE_KNOWN_SHAPE} (16) — соседям менять форму под новый блок.
+     * <p>{@code UPDATE_SUPPRESS_DROPS} (32) also keeps replaced blocks from dropping items,
+     * and {@code UPDATE_KNOWN_SHAPE} (16) keeps neighbours from reshaping around the new
+     * block.
      */
     private static final int SET_BLOCK_FLAGS =
         net.minecraft.world.level.block.Block.UPDATE_CLIENTS
             | net.minecraft.world.level.block.Block.UPDATE_SKIP_ALL_SIDEEFFECTS;
 
-    /** Режим замены существующих блоков. Имена — как в настройках Litematica. */
+    /** How existing blocks are replaced. The names follow Litematica's settings. */
     private enum Replace {
-        /** Ставить только в воздух. */
+        /** Place into air only. */
         NONE,
-        /** Заменять всё. */
+        /** Replace everything. */
         ALL,
-        /** Заменять всё, но не ставить воздух поверх блоков. */
+        /** Replace everything, but do not place air over blocks. */
         WITH_NON_AIR;
 
         static Replace parse(final String raw) {
@@ -88,7 +89,7 @@ public final class LitematicaPaste {
         }
     }
 
-    /** Итог вставки — для отчёта в чат. */
+    /** Paste result, for the chat report. */
     public record Result(int placed, int skipped, int entities, int regions) {
     }
 
@@ -119,9 +120,9 @@ public final class LitematicaPaste {
                 continue;
             }
 
-            // Внимание: точка берётся из ПОДРЕГИОНА, а не из Regions.<name>.Position.
-            // В Litematica это placement.getPos(); перепутать легко, а последствие —
-            // постройка встанет не туда.
+            // Note: the origin comes from the SUBREGION, not from Regions.<name>.Position.
+            // In Litematica that is placement.getPos(); the two are easy to confuse, and the
+            // consequence is a build placed in the wrong spot.
             final BlockPos regionPos = subRegions.contains(name)
                 ? readVec(sub, "Pos") : readVec(region, "Position");
             final BlockPos regionSize = readVec(region, "Size");
@@ -134,7 +135,7 @@ public final class LitematicaPaste {
             placed += partial.placed();
             skipped += partial.skipped();
 
-            // Подрегион может запрещать сущности отдельно от общего флага запроса.
+            // A subregion can forbid entities independently of the request-wide flag.
             if (withEntities && !sub.getBooleanOr("IgnoreEntities", false)) {
                 entities += pasteEntities(level, region, origin, regionPos,
                     mainRotation, mainMirror, subRotation, subMirrorRaw);
@@ -144,15 +145,15 @@ public final class LitematicaPaste {
     }
 
     /**
-     * Сущности региона.
+     * Entities of a region.
      *
-     * <p>Позиция сущности хранится в её же NBT полем {@code Pos} и отсчитывается от угла
-     * региона. Преобразование — как у блоков, но в дробных координатах: у Litematica это
-     * {@code getTransformedPosition}, где отражение считается от единицы, а не от нуля,
-     * потому что речь про точку внутри клетки, а не про саму клетку.
+     * <p>An entity's position is stored in its own NBT under {@code Pos}, measured from the
+     * region corner. The transform is the same as for blocks but in fractional coordinates:
+     * in Litematica that is {@code getTransformedPosition}, where mirroring is taken about
+     * one rather than zero, because this is a point inside a cell rather than the cell itself.
      *
-     * <p>Смещение здесь <b>без</b> поправки на минимальный угол: у сущностей координата
-     * уже абсолютна внутри региона.
+     * <p>The offset here carries <b>no</b> minimum-corner correction: for entities the
+     * coordinate is already absolute within the region.
      */
     private static int pasteEntities(final ServerLevel level,
                                      final CompoundTag region,
@@ -204,13 +205,13 @@ public final class LitematicaPaste {
                             return loaded;
                         });
                 if (entity != null) {
-                    // Метод не возвращает результат: сущность либо добавится, либо будет
-                    // отброшена движком. Считаем попытки — точнее отсюда не узнать.
+                    // The method returns nothing: the entity is either added or discarded by
+                    // the engine. We count attempts — nothing more precise is available here.
                     level.addFreshEntityWithPassengers(entity);
                     spawned++;
                 }
             } catch (final Throwable ignored) {
-                // Одна испорченная сущность не должна срывать всю вставку.
+                // One corrupt entity must not abort the whole paste.
             }
         }
         return spawned;
@@ -227,10 +228,10 @@ public final class LitematicaPaste {
     }
 
     /**
-     * {@code PositionUtils.getTransformedPosition} — дробный вариант.
+     * {@code PositionUtils.getTransformedPosition} — the fractional variant.
      *
-     * <p>Отражение считается от единицы: точка внутри клетки при зеркалировании должна
-     * остаться внутри той же клетки, а не уехать на её край.
+     * <p>Mirroring is taken about one: a point inside a cell must stay inside the same cell
+     * when mirrored, not slide onto its edge.
      */
     private static net.minecraft.world.phys.Vec3 transform(
         final net.minecraft.world.phys.Vec3 pos, final Mirror mirror, final Rotation rotation) {
@@ -284,7 +285,7 @@ public final class LitematicaPaste {
 
         final Map<BlockPos, CompoundTag> tiles = readTiles(region.getListOrEmpty("TileEntities"));
 
-        // Untransformed relative positions, как в оригинале.
+        // Untransformed relative positions, as in the original.
         final BlockPos endRelSub = relativeEnd(regionSize);
         final BlockPos endRel = endRelSub.offset(regionPos);
         final BlockPos minRel = min(regionPos, endRel);
@@ -292,7 +293,7 @@ public final class LitematicaPaste {
 
         final Rotation combined = mainRotation.getRotated(subRotation);
         Mirror subMirror = subMirrorRaw;
-        // Поворот основного размещения на 90 градусов меняет ось отражения подрегиона.
+        // Rotating the main placement by 90 degrees changes the subregion's mirror axis.
         if (subMirror != Mirror.NONE
             && (mainRotation == Rotation.CLOCKWISE_90 || mainRotation == Rotation.COUNTERCLOCKWISE_90)) {
             subMirror = subMirror == Mirror.FRONT_BACK ? Mirror.LEFT_RIGHT : Mirror.FRONT_BACK;
@@ -353,8 +354,8 @@ public final class LitematicaPaste {
                         continue;
                     }
 
-                    // Старый контейнер сначала опустошаем, иначе его содержимое выпадет
-                    // на пол при замене. Так же поступает и Litematica.
+                    // Empty the old container first, otherwise its contents spill onto the
+                    // floor when it is replaced. Litematica does the same.
                     final BlockEntity existing = level.getBlockEntity(target);
                     if (existing instanceof final net.minecraft.world.Container container) {
                         container.clearContent();
@@ -372,7 +373,7 @@ public final class LitematicaPaste {
         return new Result(placed, skipped, 0, 1);
     }
 
-    /** Данные тайл-энтити: координаты в них региональные, заменяем на мировые. */
+    /** Block entity data: the coordinates in it are region-local, so we make them world ones. */
     private static void applyTile(final ServerLevel level, final BlockPos pos, final CompoundTag tile) {
         final BlockEntity target = level.getBlockEntity(pos);
         if (target == null) {
@@ -392,17 +393,17 @@ public final class LitematicaPaste {
             }
             target.setChanged();
         } catch (final Throwable ignored) {
-            // Испорченные данные одного блока не должны срывать всю вставку.
+            // Corrupt data for one block must not abort the whole paste.
         }
     }
 
-    // ------------------------------------------------------------------ разбор
+    // ------------------------------------------------------------------ parsing
 
     /**
-     * Распаковка спаннинг-битмассива Litematica.
+     * Unpacking Litematica's spanning bit array.
      *
-     * <p>Запись может пересекать границу двух {@code long} — этим формат отличается от
-     * ванильного палитрового контейнера, где записи не пересекаются.
+     * <p>An entry may cross the boundary between two {@code long}s — that is how the format
+     * differs from the vanilla palette container, where entries never straddle.
      */
     private static int paletteIndex(final long[] array, final int bits, final long mask,
                                     final long index) {
@@ -440,8 +441,8 @@ public final class LitematicaPaste {
     }
 
     /**
-     * Позиция может лежать компаундом {@code {x,y,z}} или массивом из трёх чисел —
-     * Litematica пишет по-разному в разных местах.
+     * A position may be stored as a compound {@code {x,y,z}} or as an array of three
+     * numbers — Litematica writes it differently in different places.
      */
     private static BlockPos readVec(final CompoundTag tag, final String key) {
         final List<Integer> array = tag.getIntArray(key)
@@ -455,9 +456,9 @@ public final class LitematicaPaste {
         return new BlockPos(inner.getIntOr("x", 0), inner.getIntOr("y", 0), inner.getIntOr("z", 0));
     }
 
-    // ------------------------------------------------------- геометрия Litematica
+    // ------------------------------------------------------- Litematica geometry
 
-    /** Размер может быть отрицательным: конец считается со сдвигом к нулю на единицу. */
+    /** A size may be negative: the end is computed with a one-block shift towards zero. */
     private static BlockPos relativeEnd(final BlockPos size) {
         return new BlockPos(
             size.getX() >= 0 ? size.getX() - 1 : size.getX() + 1,
@@ -472,7 +473,7 @@ public final class LitematicaPaste {
             Math.min(a.getZ(), b.getZ()));
     }
 
-    /** {@code PositionUtils.getTransformedBlockPos} — воспроизведено дословно. */
+    /** {@code PositionUtils.getTransformedBlockPos} — reproduced literally. */
     private static BlockPos transform(final BlockPos pos, final Mirror mirror, final Rotation rotation) {
         int x = pos.getX();
         final int y = pos.getY();
@@ -504,7 +505,7 @@ public final class LitematicaPaste {
     }
 
     /**
-     * Отражение блока с исправлением известных ванильных багов (двойные сундуки, ступени).
+     * Mirroring a block, working around the known vanilla bugs (double chests, stairs).
      */
     public static BlockState applyMirror(final BlockState state, final Mirror mirror) {
         if (mirror == Mirror.NONE) {
@@ -523,7 +524,7 @@ public final class LitematicaPaste {
     }
 
     /**
-     * Поворот блока с исправлением ванильного бага поворота прямых рельсов на 180°.
+     * Rotating a block, working around the vanilla bug in rotating straight rails by 180°.
      */
     public static BlockState applyRotation(final BlockState state, final Rotation rotation) {
         if (rotation == Rotation.NONE) {

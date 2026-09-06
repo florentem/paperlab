@@ -10,51 +10,50 @@ import org.bukkit.entity.Player;
 import paperlab.core.CoreBridge;
 
 /**
- * Режим наблюдателя: игрок перестаёт влиять на симуляцию, но продолжает
- * взаимодействовать с миром.
+ * Observer mode: the player stops affecting the simulation but keeps interacting with the
+ * world.
  *
- * <p>Задача — летать вдоль границы чанков и разбирать конструкцию фермы, пока её
- * обслуживает бот, и при этом не искажать то, что измеряешь.
+ * <p>The point is to fly along a chunk border and take a farm apart while a bot keeps it
+ * running, without distorting what you are measuring.
  *
- * <p><b>Это не spectator.</b> Блоки ставятся и ломаются, контейнеры открываются,
- * инвентарь работает. Отключено только влияние на серверную симуляцию.
+ * <p><b>This is not spectator.</b> Blocks place and break, containers open, the inventory
+ * works. Only the effect on the server simulation is off.
  *
- * <h2>Полный режим — на нашем ядре</h2>
- * Шесть точек исключения, из них три без всякого API:
+ * <h2>Full mode — on our core</h2>
+ * Six exclusion sites, three of which have no API at all:
  * <ol>
- *   <li>перепись мобкапа {@code ChunkMap.updatePlayerMobTypeMap} и начисление backoff
- *       {@code updateFailurePlayerMobTypeMap} — наблюдатель не занимает кап;</li>
- *   <li>{@code NaturalSpawner.spawnForChunk} — не режет бюджет чанка соседу;</li>
- *   <li>{@code ChunkMap.isChunkNearPlayer} — не расширяет область спавна;</li>
- *   <li>{@code ChunkMap.skipPlayer} — не участвует в загрузке чанков;</li>
- *   <li>{@code ActivationRange.activateEntities} — не будит мобов (EAR);</li>
- *   <li>{@code LivingEntity.canBeSeenByAnyone} — мобы не выбирают его целью.</li>
+ *   <li>the mobcap census {@code ChunkMap.updatePlayerMobTypeMap} and backoff accrual
+ *       {@code updateFailurePlayerMobTypeMap} — the observer takes no cap;</li>
+ *   <li>{@code NaturalSpawner.spawnForChunk} — does not eat a neighbour's chunk budget;</li>
+ *   <li>{@code ChunkMap.isChunkNearPlayer} — does not widen the spawn area;</li>
+ *   <li>{@code ChunkMap.skipPlayer} — takes no part in chunk loading;</li>
+ *   <li>{@code ActivationRange.activateEntities} — does not wake mobs (EAR);</li>
+ *   <li>{@code LivingEntity.canBeSeenByAnyone} — mobs do not target them.</li>
  * </ol>
- * Плюс два штатных механизма, патча не требующих: {@code affectsSpawning} (деспавн,
- * выбор позиции спавна, trial spawner) и персональная дистанция симуляции.
+ * Plus two stock mechanisms that need no patch: {@code affectsSpawning} (despawning, spawn
+ * position choice, trial spawner) and the personal simulation distance.
  *
- * <h2>Урезанный режим — на чистом Paper</h2>
- * Остаются только {@code affectsSpawning}, дистанция симуляции и невидимость.
- * Наблюдатель <b>по-прежнему занимает мобкап, будит мобов через EAR и замечается ими</b>.
- * Пролетать рядом с работающей фермой в таком режиме всё ещё искажает измерение.
+ * <h2>Reduced mode — on stock Paper</h2>
+ * Only {@code affectsSpawning}, the simulation distance and invisibility remain. The observer
+ * <b>still takes mobcap, still wakes mobs through EAR and is still noticed by them</b>.
+ * Flying past a running farm in this mode still distorts the measurement.
  *
- * <h2>Что важно при проверке</h2>
- * Включение действует <b>не мгновенно</b>. Значение {@code sim=0} применяется сразу,
- * но снятие уже выданных ticking-тикетов у Moonrise отложенное и с ограничением
- * скорости — на стенде с 121 чанка до 1 сходится примерно за 30 секунд. Выключение,
- * наоборот, срабатывает за секунды. Принудительная переустановка игрока в загрузчике
- * задержку не убирает, поэтому лишней логики здесь нет.
+ * <h2>What matters when testing</h2>
+ * Turning it on is <b>not instant</b>. {@code sim=0} applies immediately, but Moonrise
+ * releases already-issued ticking tickets lazily and rate-limited — on the bench it settles
+ * from 121 chunks to 1 in about 30 seconds. Turning it off, by contrast, takes seconds.
+ * Forcibly re-registering the player in the loader does not remove the delay, so there is no
+ * extra logic here.
  *
- * <p>Полного нуля Moonrise не поддерживает: отрицательное значение означает
- * «наследовать мировое», поэтому под самим наблюдателем остаётся один тикающий чанк.
- * Известное ограничение, а не недосмотр.
+ * <p>Moonrise does not support a true zero: a negative value means "inherit the world's", so
+ * one ticking chunk remains under the observer. A known limitation, not an oversight.
  *
- * <p>Состояние держится в памяти и сбрасывается при перезапуске: это режим отладки,
- * а не свойство игрока.
+ * <p>The state is held in memory and cleared on restart: this is a debugging mode, not a
+ * property of the player.
  */
 public final class LabGhost {
 
-    /** Используется только в урезанном режиме: на ядре источник истины — оно само. */
+    /** Used in reduced mode only: with the core present, the core is the source of truth. */
     private static final Set<UUID> FALLBACK = new HashSet<>();
 
     private LabGhost() {
@@ -92,7 +91,7 @@ public final class LabGhost {
 
     public static void onDisconnect(final Player player) {
         if (CoreBridge.PRESENT) {
-            // Ядро снимает режим само в PlayerList.remove; здесь ничего не нужно.
+            // The core clears the mode itself in PlayerList.remove; nothing to do here.
             return;
         }
         if (FALLBACK.remove(player.getUniqueId())) {
@@ -105,12 +104,12 @@ public final class LabGhost {
     }
 
     /**
-     * Полностью убрать наблюдателя с чужих экранов: не только модель, но и таб-лист,
-     * и трекинг сущности.
+     * Remove the observer from other people's screens entirely: not just the model, but the
+     * tab list and entity tracking too.
      *
-     * <p>{@code setInvisible} одного мало — невидимая модель всё равно остаётся в списке
-     * игроков и в трекере, её видно по нику над головой и по строке в табе. Наблюдателя
-     * не должно быть видно вообще: он инструмент, а не участник.
+     * <p>{@code setInvisible} alone is not enough — an invisible model still stays in the
+     * player list and the tracker, visible through the name tag and the tab-list row. An
+     * observer should not be visible at all: they are an instrument, not a participant.
      */
     private static void applyVisibility(final Player player, final boolean ghost) {
         final var plugin = paperlab.PaperLabPlugin.get();
@@ -129,7 +128,7 @@ public final class LabGhost {
         }
     }
 
-    /** Вошедший не должен видеть тех, кто уже в режиме наблюдателя. */
+    /** A joining player must not see those already in observer mode. */
     public static void hideGhostsFrom(final Player viewer) {
         final var plugin = paperlab.PaperLabPlugin.get();
         if (plugin == null) {
@@ -142,7 +141,7 @@ public final class LabGhost {
         }
     }
 
-    /** При выключении плагина вернуть всех в обычное состояние. */
+    /** On plugin disable, return everyone to the normal state. */
     public static void restoreAll() {
         for (final Player player : Bukkit.getOnlinePlayers()) {
             if (isGhost(player)) {
@@ -156,14 +155,14 @@ public final class LabGhost {
         return CoreBridge.PRESENT ? Core.count() : FALLBACK.size();
     }
 
-    /** Полный ли режим. Показывается в подсказках, чтобы числа не читали как точные. */
+    /** Whether the mode is full. Shown in hints so the numbers are not read as exact. */
     public static boolean full() {
         return CoreBridge.PRESENT;
     }
 
     /**
-     * Делегат к ядру. Отдельный класс: на чистом Paper он никогда не загружается,
-     * поэтому отсутствие классов ядра не приводит к ошибке разрешения.
+     * Delegate to the core. A separate class: on stock Paper it is never loaded, so the
+     * absence of core classes causes no resolution error.
      */
     private static final class Core {
 

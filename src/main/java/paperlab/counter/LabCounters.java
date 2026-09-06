@@ -11,6 +11,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.minecraft.world.item.DyeColor;
+import paperlab.text.Msg;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
@@ -23,23 +24,25 @@ import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Счётчики воронок.
+ * Hopper counters.
  *
- * <p><b>Механика отличается от версии в ядре, и это ограничение плагина.</b>
- * Ядро перехватывало {@code HopperBlockEntity.ejectItems} и забирало содержимое ровно
- * в тот момент, когда воронка пыталась выгрузиться. Из плагина такого перехвата нет,
- * поэтому воронки, направленные в шерсть, опустошаются задачей раз в тик.
+ * <p><b>The mechanism differs from the core version, and that is a plugin limitation.</b>
+ * The core used to intercept {@code HopperBlockEntity.ejectItems} and take the contents at the
+ * exact moment the hopper tried to push. A plugin has no such interception, so hoppers pointed
+ * into wool are drained by a once-per-tick task.
  *
- * <p>Практические следствия:
+ * <p>Practical consequences:
  * <ul>
- *   <li>момент учёта может отличаться от «настоящего» на тик;</li>
- *   <li>воронка успевает заполниться, поэтому её собственный cooldown ведёт себя как
- *       у обычной полной воронки, а не как у мгновенно опустошаемой.</li>
+ *   <li>the moment of accounting can be a tick off from the real one;</li>
+ *   <li>the hopper does fill up, so its own cooldown behaves like an ordinary full hopper's
+ *       rather than an instantly drained one.</li>
  * </ul>
- * Для сравнения рейтов между прогонами это приемлемо, для субтиковых измерений — нет.
+ * That is acceptable for comparing rates between runs, but not for sub-tick measurements.
  *
- * <p>Список отслеживаемых воронок наполняется при установке блока и командой
- * {@code /counter scan}: обходить все загруженные чанки каждый тик слишком дорого.
+ * <p>The tracked-hopper list is filled on block placement and by {@code /counter scan}: walking
+ * every loaded chunk each tick would be far too expensive.
+ *
+ * <p>The counter summary line follows Carpet Mod (MIT, (c) gnembon), see THIRD-PARTY.md.
  */
 public final class LabCounters {
 
@@ -54,13 +57,13 @@ public final class LabCounters {
 
     private static final Map<Key, LabCounter> COUNTERS = new java.util.concurrent.ConcurrentHashMap<>();
 
-    /** Отслеживаемые воронки: местоположение → цвет шерсти, в которую она смотрит. */
+    /** Tracked hoppers: location -> the colour of the wool it points into. */
     private static final Map<BlockPosKey, DyeColor> TRACKED = new java.util.concurrent.ConcurrentHashMap<>();
 
     private LabCounters() {
     }
 
-    /** Проверка воронки: смотрит ли она в блок шерсти. */
+    /** Hopper check: does it point into a wool block. */
     public static @Nullable DyeColor targetColour(final Block block) {
         if (!(block.getState() instanceof Hopper)) {
             return null;
@@ -73,7 +76,7 @@ public final class LabCounters {
         return WoolColors.byMaterial(target.getType());
     }
 
-    /** Добавить воронку под наблюдение, если она смотрит в шерсть. */
+    /** Start tracking a hopper if it points into wool. */
     public static boolean track(final Block block) {
         final DyeColor colour = targetColour(block);
         final BlockPosKey key = BlockPosKey.of(block);
@@ -85,7 +88,7 @@ public final class LabCounters {
         return true;
     }
 
-    /** Обойти окрестности игрока и найти воронки, смотрящие в шерсть. */
+    /** Walk the area around a player and find hoppers pointing into wool. */
     public static int scan(final Location centre, final int radius) {
         int found = 0;
         final World world = centre.getWorld();
@@ -108,7 +111,7 @@ public final class LabCounters {
         return found;
     }
 
-    /** Раз в тик: опустошаем отслеживаемые воронки и учитываем содержимое. */
+    /** Once per tick: drain the tracked hoppers and account for the contents. */
     public static void tick() {
         if (TRACKED.isEmpty()) {
             return;
@@ -123,7 +126,7 @@ public final class LabCounters {
             final Block block = world.getBlockAt(posKey.x(), posKey.y(), posKey.z());
             final DyeColor colour = targetColour(block);
             if (colour == null) {
-                // Воронку сломали или развернули — снимаем с наблюдения.
+                // The hopper was broken or turned — stop tracking it.
                 stale.add(posKey);
                 continue;
             }
@@ -185,21 +188,46 @@ public final class LabCounters {
         return TRACKED.size();
     }
 
-    /** Одна строка: цвет, всего, рейт, время. */
-    public static TextComponent summary(final LabCounter counter, final long gameTime,
-                                        final boolean withWorld) {
+    /**
+     * The counter summary line — Carpet's grammar: {@code name: total, N/h, M.M min}.
+     *
+     * <p>The name is painted in the dye's true colour (as in the mod) rather than an
+     * approximate named one: {@code light_blue} and {@code cyan} merge into one another among
+     * Minecraft's sixteen named colours, and several counters sit side by side in the tab list
+     * where they have to be told apart at a glance.
+     */
+    public static Component summary(final LabCounter counter, final long gameTime,
+                                    final boolean withWorld) {
         final Double perHour = counter.perHour(gameTime);
-        final double minutes = counter.elapsedTicks(gameTime) / 1200.0D;
-        TextComponent line = Component.text(counter.colour().getName(), chatColour(counter.colour()));
-        if (withWorld) {
-            line = line.append(Component.text("@" + counter.world(), NamedTextColor.DARK_GRAY));
+        final long ticks = Math.max(counter.elapsedTicks(gameTime), 1L);
+        final double minutes = ticks / 1200.0D;
+        final String name = hexStyle(counter.colour()) + " " + counter.colour().getName();
+
+        if (!counter.started()) {
+            return Msg.c("b" + name, "w : ", "gi -, -/h, - min ");
         }
-        return line
-            .append(Component.text("  " + counter.total(), NamedTextColor.WHITE))
-            .append(Component.text("  " + (perHour == null
-                ? "N/A"
-                : String.format(Locale.ROOT, "%.0f/h", perHour)), NamedTextColor.AQUA))
-            .append(Component.text(String.format(Locale.ROOT, "  %.1fm", minutes), NamedTextColor.DARK_GRAY));
+        final java.util.List<Object> parts = new java.util.ArrayList<>();
+        parts.add("b" + name);
+        if (withWorld) {
+            parts.add("g @" + counter.world());
+        }
+        parts.add("w : ");
+        parts.add("wb " + counter.total());
+        parts.add("w , ");
+        parts.add("wb " + (perHour == null ? "-" : String.format(Locale.ROOT, "%.0f", perHour)));
+        parts.add("w /h, ");
+        parts.add(String.format(Locale.ROOT, "wb %.1f ", minutes));
+        parts.add("w min");
+        return Msg.c(parts.toArray());
+    }
+
+    /** The dye colour as an {@link Msg} style — {@code #rrggbb}, as in Carpet. */
+    public static String hexStyle(final DyeColor dye) {
+        String hex = Integer.toHexString(dye.getTextColor() & 0xFFFFFF);
+        if (hex.length() < 6) {
+            hex = "0".repeat(6 - hex.length()) + hex;
+        }
+        return "#" + hex;
     }
 
     public static NamedTextColor chatColour(final DyeColor dye) {
@@ -221,14 +249,14 @@ public final class LabCounters {
         };
     }
 
-    /** Ставим воронку или шерсть — сразу берём под наблюдение. */
+    /** A hopper or wool was placed — start tracking immediately. */
     public static final class Listener implements org.bukkit.event.Listener {
 
         @EventHandler
         public void onPlace(final BlockPlaceEvent event) {
             final Block placed = event.getBlockPlaced();
             track(placed);
-            // Шерсть могли поставить перед уже существующей воронкой.
+            // The wool may have been placed in front of an existing hopper.
             for (final BlockFace face : BlockFace.values()) {
                 if (face.isCartesian()) {
                     track(placed.getRelative(face));

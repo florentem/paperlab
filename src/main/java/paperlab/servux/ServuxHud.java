@@ -25,41 +25,41 @@ import org.jetbrains.annotations.NotNull;
 import paperlab.command.LabPermissions;
 
 /**
- * Канал {@code servux:hud_metadata} — то, что MiniHUD ждёт от серверной части.
+ * The {@code servux:hud_metadata} channel — what MiniHUD expects from a server side.
  *
- * <p><b>Зачем свой, а не поставить Servux.</b> Servux — фабричный мод с миксинами;
- * на Paper он не запустится. Клиенту при этом безразлично, кто отвечает на канале, лишь бы
- * формат совпадал. Поэтому отвечаем сами — и заодно можем раздавать это по правам, а не
- * по одному общему уровню оператора, как в оригинале.
+ * <p><b>Why our own rather than installing Servux.</b> Servux is a Fabric mod with mixins;
+ * it will not start on Paper. The client, meanwhile, does not care who answers on a channel
+ * as long as the format matches. So we answer ourselves — and can hand this out by
+ * permission rather than by a single blanket operator level, as the original does.
  *
- * <h2>Рукопожатие — единственная точка, где нельзя ошибиться</h2>
- * MiniHUD сверяет два поля метаданных: {@code version} должно совпасть с версией протокола
- * (3), а {@code servux} — начинаться с {@code servux-fabric-<версия MC>}. При несовпадении
- * он <b>молча</b> считает сервер неподходящим: ни ошибки, ни строки в логе на клиенте.
- * Отсюда и строка версии ниже, собранная из {@code SharedConstants}.
+ * <h2>The handshake is the one place you cannot get wrong</h2>
+ * MiniHUD checks two metadata fields: {@code version} must equal the protocol version (3),
+ * and {@code servux} must start with {@code servux-fabric-<MC version>}. On a mismatch it
+ * <b>silently</b> decides the server is unsuitable: no error, no client log line. Hence the
+ * version string below, assembled from {@code SharedConstants}.
  *
- * <p>Слово {@code fabric} в строке — не описка: MiniHUD сверяет с собственным
- * {@code MOD_TYPE}, а он у клиента всегда {@code fabric}. К нашей платформе это отношения
- * не имеет.
+ * <p>The word {@code fabric} in that string is not a typo: MiniHUD compares against its own
+ * {@code MOD_TYPE}, which on a client is always {@code fabric}. It says nothing about our
+ * platform.
  *
- * <h2>Что уже отвечаем</h2>
+ * <h2>What we already answer</h2>
  * <ul>
- *   <li>{@code METADATA} — рукопожатие, точка мирового спавна, при желании сид;</li>
- *   <li>{@code SPAWN_DATA} — то же по отдельному запросу, когда спавн меняется.</li>
+ *   <li>{@code METADATA} — handshake, world spawn point, and the seed if allowed;</li>
+ *   <li>{@code SPAWN_DATA} — the same on a separate request, when the spawn changes.</li>
  * </ul>
  *
- * <p>Остальные типы ({@code weather}, {@code data logger} с TPS и мобкапами, рецепты)
- * пока принимаются и игнорируются — но именно принимаются, чтобы клиент не считал канал
- * сломанным.
+ * <p>The remaining types ({@code weather}, the {@code data logger} carrying TPS and mobcaps,
+ * recipes) are accepted and ignored for now — accepted specifically so the client does not
+ * consider the channel broken.
  */
 public final class ServuxHud implements PluginMessageListener {
 
     public static final String CHANNEL = "servux:hud_metadata";
 
-    /** Версия протокола Servux для этого канала. Обязана совпасть с клиентской. */
+    /** Servux protocol version for this channel. Must match the client's. */
     public static final int PROTOCOL_VERSION = 3;
 
-    // Типы пакетов — по ServuxHudPacket.Type.
+    // Packet types, from ServuxHudPacket.Type.
     private static final int S2C_METADATA = 1;
     private static final int C2S_METADATA_REQUEST = 2;
     private static final int S2C_SPAWN_DATA = 3;
@@ -74,27 +74,28 @@ public final class ServuxHud implements PluginMessageListener {
 
     private static final Set<UUID> REGISTERED = ConcurrentHashMap.newKeySet();
 
-    /** Кто на какие логгеры подписан. Имена — как в протоколе Servux. */
+    /** Who is subscribed to which loggers. The names follow the Servux protocol. */
     private static final Map<UUID, Set<String>> LOGGERS = new ConcurrentHashMap<>();
 
     private static final String LOGGER_TPS = "tps";
     private static final String LOGGER_MOB_CAPS = "mob_caps";
 
-    /** Как часто уходит тик логгеров. Столько же у Servux. */
+    /** How often the logger tick goes out. Same value as Servux. */
     private static final int LOGGER_PERIOD_TICKS = 15;
 
-    /** Как часто уходит тик погоды (40 тиков = 2 секунды). */
+    /** How often the weather tick goes out (40 ticks = 2 seconds). */
     private static final int WEATHER_PERIOD_TICKS = 40;
 
-    /** Делитель площади в ванильной формуле глобального капа: 17 x 17 чанков. */
+    /** Area divisor in the vanilla global cap formula: 17 x 17 chunks. */
     private static final int SPAWN_AREA_CHUNKS = 17 * 17;
 
     private static long tickCounter;
     private static Plugin plugin;
 
     /**
-     * Отдавать ли сид мира. По умолчанию нет: сид — это знание о мире, которое обычный
-     * игрок иначе не получит, и раздавать его молча неправильно.
+     * Whether to hand out the world seed. Off by default: a seed is knowledge about the world
+     * an ordinary player could not otherwise obtain, and giving it away silently would be
+     * wrong.
      */
     private static volatile boolean shareSeed;
 
@@ -146,7 +147,7 @@ public final class ServuxHud implements PluginMessageListener {
                     REGISTERED.remove(player.getUniqueId());
                     LOGGERS.remove(player.getUniqueId());
                 }
-                // Приняли и промолчали: клиенту важно, что канал жив.
+                // Accepted and ignored: what matters to the client is that the channel is alive.
                 case C2S_RECIPE_MANAGER_REQUEST -> {
                 }
                 default -> {
@@ -197,7 +198,7 @@ public final class ServuxHud implements PluginMessageListener {
         send(player, ServuxWire.data(S2C_SPAWN_DATA, tag));
     }
 
-    /** Какие логгеры этот сервер вообще умеет. Клиент по этому списку строит запрос. */
+    /** Which loggers this server supports at all. The client builds its request from this list. */
     private static void putLoggers(final CompoundTag tag) {
         final CompoundTag loggers = new CompoundTag();
         loggers.putBoolean(LOGGER_TPS, true);
@@ -206,7 +207,7 @@ public final class ServuxHud implements PluginMessageListener {
     }
 
     /**
-     * Клиент прислал, какие логгеры ему нужны: компаунд {@code имя -> включён}.
+     * The client has sent which loggers it wants: a compound of {@code name -> enabled}.
      */
     private void onLoggerRequest(final Player player, final byte[] message) throws IOException {
         if (!REGISTERED.contains(player.getUniqueId())) {
@@ -218,10 +219,10 @@ public final class ServuxHud implements PluginMessageListener {
             if ("version".equals(key)) {
                 continue;
             }
-            // Клиент присылает ИМЯ КОНСТАНТЫ enum: "TPS" и "MOB_CAPS", в верхнем регистре
-            // (MiniHUD зовёт .name(), а не .getSerializedName()). А ответ разбирает уже по
-            // сериализованному имени — "tps", "mob_caps". Читаем в любом регистре,
-            // отвечаем строчными: так же, как это делает сам Servux.
+            // The client sends the ENUM CONSTANT NAME: "TPS" and "MOB_CAPS", upper case
+            // (MiniHUD calls .name(), not .getSerializedName()). But it parses the response by
+            // the serialized name — "tps", "mob_caps". So we read case-insensitively and answer
+            // in lower case, exactly as Servux itself does.
             final String normalised = key.toLowerCase(java.util.Locale.ROOT);
             if (request.getBooleanOr(key, false)
                 && (LOGGER_TPS.equals(normalised) || LOGGER_MOB_CAPS.equals(normalised))) {
@@ -229,8 +230,8 @@ public final class ServuxHud implements PluginMessageListener {
             }
         }
         if (DEBUG) {
-            // Пустой список законен: значит в MiniHUD выключены сами строки HUD
-            // (SERVER_TPS и MOB_CAPS). Отличить это от неверного ключа можно только так.
+            // An empty list is legitimate: it means the HUD lines themselves (SERVER_TPS and
+            // MOB_CAPS) are off in MiniHUD. This is the only way to tell that from a bad key.
             final StringBuilder dump = new StringBuilder();
             request.keySet().forEach(key ->
                 dump.append(key).append('=').append(request.getBooleanOr(key, false)).append(' '));
@@ -248,7 +249,7 @@ public final class ServuxHud implements PluginMessageListener {
         }
     }
 
-    /** Тик логгеров и погоды. Вызывается из общего тика плагина. */
+    /** Logger and weather tick. Called from the plugin's shared tick. */
     public static void tick() {
         tickCounter++;
         if (tickCounter >= 1_000_000) {
@@ -347,7 +348,7 @@ public final class ServuxHud implements PluginMessageListener {
         final CompoundTag tag = new CompoundTag();
         tag.putDouble("mspt", Bukkit.getAverageTickTime());
         tag.putDouble("tps", Math.min(Bukkit.getTPS()[0], 20.0D));
-        // Сколько тиков осталось спринту, наружу не отдаётся; ноль честнее выдумки.
+        // How many sprint ticks remain is not exposed; zero is honester than a guess.
         tag.putLong("sprintTicks", 0L);
         tag.putBoolean("frozen", manager.isFrozen());
         tag.putBoolean("sprinting", manager.isSprinting());
@@ -356,9 +357,9 @@ public final class ServuxHud implements PluginMessageListener {
     }
 
     /**
-     * Мобкапы в том виде, в каком их ждёт MiniHUD.
-     * MiniHUD ожидает компаунд сопоставлений dimKey -> { WorldTick, cap_count, cap_data: [...] }.
-     * Каждая запись cap_data содержит { current, cap }.
+     * Mobcaps in the shape MiniHUD expects: a compound mapping
+     * dimKey -&gt; { WorldTick, cap_count, cap_data: [...] }, where each cap_data entry holds
+     * { current, cap }.
      */
     public static CompoundTag mobCapData() {
         final CompoundTag root = new CompoundTag();
@@ -395,10 +396,10 @@ public final class ServuxHud implements PluginMessageListener {
     }
 
     /**
-     * Точка мирового спавна.
+     * The world spawn point.
      *
-     * <p>Берётся из мира <b>овера</b>, а не из мира игрока: MiniHUD показывает именно
-     * мировой спавн, и в незере он не меняется.
+     * <p>Taken from the <b>overworld</b> rather than the player's world: MiniHUD shows the
+     * world spawn, and it does not change in the nether.
      */
     private static void putSpawn(final CompoundTag tag, final Player player) {
         final ServerLevel overworld = ((CraftWorld) Bukkit.getWorlds().get(0)).getHandle();
@@ -416,17 +417,17 @@ public final class ServuxHud implements PluginMessageListener {
     }
 
     /**
-     * Строка версии в том виде, в каком её ждёт MiniHUD:
-     * {@code servux-fabric-<версия MC>-<что угодно>}.
+     * The version string in the shape MiniHUD expects:
+     * {@code servux-fabric-<MC version>-<anything>}.
      */
     public static String versionString() {
         return "servux-fabric-" + SharedConstants.getCurrentVersion().id() + "-paperlab";
     }
 
     /**
-     * Отправка в обход {@code sendPluginMessage}: тот молча ничего не делает, пока клиент
-     * не объявил канал через {@code minecraft:register}, а объявление приходит своим темпом.
-     * На этом мы уже обожглись с ChunkDebug.
+     * Sending that bypasses {@code sendPluginMessage}: that method silently does nothing until
+     * the client has announced the channel via {@code minecraft:register}, and the announcement
+     * arrives at its own pace. We already got burned by this with ChunkDebug.
      */
     private static void send(final Player player, final byte[] body) {
         final var connection = ((CraftPlayer) player).getHandle().connection;

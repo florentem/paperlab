@@ -23,32 +23,32 @@ import org.jetbrains.annotations.NotNull;
 import paperlab.command.LabPermissions;
 
 /**
- * Канал {@code servux:entity_data} — данные сущности и блока под прицелом.
+ * The {@code servux:entity_data} channel — data for the entity and block under the crosshair.
  *
- * <p>Ради этого канала MiniHUD показывает содержимое сундука на расстоянии, инвентарь моба
- * и полный NBT того, на что смотришь. Без серверной части клиенту эти данные просто негде
- * взять: ваниль их не рассылает.
+ * <p>This channel is what lets MiniHUD show a chest's contents at range, a mob's inventory and
+ * the full NBT of whatever you are looking at. Without a server side the client has nowhere to
+ * get that: vanilla does not broadcast it.
  *
- * <p><b>Это чтение чужого NBT.</b> Поэтому у канала своё право
- * {@code paperlab.servux.entities} и оно не выдаётся заодно с HUD: видеть содержимое любого
- * сундука в зоне видимости — заметно больше, чем видеть TPS.
+ * <p><b>This reads other people's NBT.</b> Hence the channel's own permission,
+ * {@code paperlab.servux.entities}, which is not granted alongside the HUD: seeing the contents
+ * of any chest in view is a good deal more than seeing TPS.
  *
- * <h2>Протокол</h2>
+ * <h2>Protocol</h2>
  * <pre>
- * C2S 2  запрос метаданных            → S2C 1  метаданные (version=2)
- * C2S 3  varint тип + BlockPos        → S2C 5  varint тип + BlockPos + NBT
- * C2S 4  varint тип + varint id       → S2C 6  varint тип + varint id + NBT
- * C2S 7  отписка
+ * C2S 2  metadata request              -&gt; S2C 1  metadata (version=2)
+ * C2S 3  varint type + BlockPos        -&gt; S2C 5  varint type + BlockPos + NBT
+ * C2S 4  varint type + varint id       -&gt; S2C 6  varint type + varint id + NBT
+ * C2S 7  unsubscribe
  * </pre>
  *
- * <p>NBT в ответах кодируется так же, как везде у malilib: {@code varint(-1)} и следом
- * сетевой NBT. Это выяснилось по дампу настоящего пакета Litematica, см. {@link ServuxWire}.
+ * <p>NBT in the responses is encoded as everywhere in malilib: {@code varint(-1)} followed by
+ * network NBT. That came out of a dump of a real Litematica packet, see {@link ServuxWire}.
  */
 public final class ServuxEntities implements PluginMessageListener {
 
     public static final String CHANNEL = "servux:entity_data";
 
-    /** У этого канала версия 2, как у litematics. */
+    /** This channel is version 2, like litematics. */
     public static final int PROTOCOL_VERSION = 2;
 
     private static final int S2C_METADATA = 1;
@@ -60,11 +60,11 @@ public final class ServuxEntities implements PluginMessageListener {
     private static final int C2S_UNREGISTER_REPLY = 7;
 
     /**
-     * Насколько далеко разрешено спрашивать.
+     * How far away a query is allowed to reach.
      *
-     * <p>Ограничение наше, у Servux его нет. Без него запрос — это чтение любого блока мира
-     * по координате, и право на подсказки в HUD незаметно превращается в право осмотреть
-     * чужую базу.
+     * <p>The limit is ours; Servux has none. Without it a request is a read of any block in the
+     * world by coordinate, and a permission for HUD hints quietly becomes a permission to survey
+     * someone else's base.
      */
     private static final double MAX_DISTANCE = 128.0D;
 
@@ -109,14 +109,14 @@ public final class ServuxEntities implements PluginMessageListener {
                 case C2S_METADATA_REQUEST -> onRegister(player);
                 case C2S_UNREGISTER_REPLY -> REGISTERED.remove(player.getUniqueId());
                 case C2S_BLOCK_ENTITY_REQUEST -> {
-                    // MiniHUD 0.40.4 шлёт varint transactionId перед BlockPos (8 байт).
+                    // MiniHUD 0.40.4 sends a varint transactionId before the BlockPos (8 bytes).
                     if (buf.readableBytes() > 8) {
                         buf.readVarInt();
                     }
                     onBlockRequest(player, buf.readBlockPos());
                 }
                 case C2S_ENTITY_REQUEST -> {
-                    // MiniHUD 0.40.4 шлёт varint transactionId перед varint entityId.
+                    // MiniHUD 0.40.4 sends a varint transactionId before the varint entityId.
                     final int first = buf.readVarInt();
                     final int entityId = buf.isReadable() ? buf.readVarInt() : first;
                     onEntityRequest(player, entityId);
@@ -160,7 +160,7 @@ public final class ServuxEntities implements PluginMessageListener {
         if (!withinReach(player, pos.getX() + 0.5D, pos.getY() + 0.5D, pos.getZ() + 0.5D)) {
             return;
         }
-        // Только уже загруженный чанк: подсказка в HUD не повод грузить мир.
+        // Loaded chunks only: a HUD hint is no reason to load the world.
         if (level.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4) == null) {
             return;
         }
@@ -207,10 +207,10 @@ public final class ServuxEntities implements PluginMessageListener {
     }
 
     /**
-     * Снять NBT через {@code ValueOutput} и вернуть обычный компаунд.
+     * Capture NBT through {@code ValueOutput} and return a plain compound.
      *
-     * <p>В 26.2 сущности и тайл-энтити пишутся не в {@code CompoundTag} напрямую, а через
-     * {@code ValueOutput}; для отправки по проводу нужен именно компаунд.
+     * <p>In 26.2 entities and block entities are not written into a {@code CompoundTag} directly
+     * but through {@code ValueOutput}; a compound is what the wire needs.
      */
     static CompoundTag capture(final ServerLevel level,
                                final net.minecraft.util.ProblemReporter.PathElement path,

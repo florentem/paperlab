@@ -16,40 +16,36 @@ import org.jetbrains.annotations.NotNull;
 import paperlab.command.LabPermissions;
 
 /**
- * Канал {@code servux:litematics} — серверная вставка схематик без спама командами.
+ * The {@code servux:litematics} channel — server-side schematic pasting without command spam.
  *
- * <h2>Зачем</h2>
- * Без серверной части Litematica ставит блоки через {@code /setblock}: каждая команда —
- * строка в чате и в логе, и на крупной схематике это тысячи строк. С серверной частью
- * клиент присылает схематику одним телом, а блоки ставит сервер.
+ * <h2>Why</h2>
+ * Without a server side, Litematica places blocks through {@code /setblock}: every command is
+ * a line in chat and in the log, which on a large schematic means thousands of lines. With a
+ * server side the client sends the schematic as one body and the server places the blocks.
  *
- * <h2>Что здесь есть сейчас</h2>
- * Транспорт целиком: рукопожатие, приём разрезанного тела, разбор и проверка. Сама
- * установка блоков — следующий шаг; пока запрос разбирается и подробно описывается в лог,
- * чтобы формат был подтверждён до того, как код начнёт писать в мир.
- *
- * <h2>Разобранный протокол</h2>
- * Всё сверено по <b>клиентскому</b> коду Litematica, а не по Servux — после истории
- * с кадрированием иначе нельзя.
+ * <h2>The protocol, as recovered</h2>
+ * Everything was checked against Litematica's <b>client</b> code rather than against Servux —
+ * after the framing episode there is no other way.
  *
  * <ul>
- *   <li>версия протокола этого канала — <b>2</b>, а не 3, как у HUD и структур;</li>
- *   <li>клиент шлёт запрос типом {@code 12} (и продолжения — {@code 13}) через разрезатель;</li>
- *   <li>тело — компаунд {@code SchematicPlacement.toData(true)} плюс
- *       {@code Task=LitematicaPaste} и {@code Interval};</li>
- *   <li>внутри — {@code Schematics} в обычном формате {@code .litematic}:
- *       {@code Regions → { Position, Size, BlockStatePalette, BlockStates, TileEntities, Entities }}.</li>
+ *   <li>this channel's protocol version is <b>2</b>, not 3 as for HUD and structures;</li>
+ *   <li>the client sends the request as type {@code 12} (continuations {@code 13}) through the
+ *       splitter;</li>
+ *   <li>the body is a {@code SchematicPlacement.toData(true)} compound plus
+ *       {@code Task=LitematicaPaste} and {@code Interval};</li>
+ *   <li>inside it, {@code Schematics} in the ordinary {@code .litematic} format:
+ *       {@code Regions -> { Position, Size, BlockStatePalette, BlockStates, TileEntities, Entities }}.</li>
  * </ul>
  *
- * <p><b>Важная зависимость:</b> Litematica предлагает вставку через Servux только если
- * этот канал зарегистрирован <i>и</i> в её настройках включён {@code pasteUsingServux}.
- * Без первого пункт меню просто не появится.
+ * <p><b>An important dependency:</b> Litematica offers Servux pasting only if this channel is
+ * registered <i>and</i> {@code pasteUsingServux} is enabled in its settings. Without the former
+ * the menu item simply does not appear.
  */
 public final class ServuxLitematica implements PluginMessageListener {
 
     public static final String CHANNEL = "servux:litematics";
 
-    /** У этого канала версия 2. У HUD и структур — 3; перепутать легко. */
+    /** This channel is version 2. HUD and structures are 3; easy to confuse. */
     public static final int PROTOCOL_VERSION = 2;
 
     private static final int S2C_METADATA = 1;
@@ -138,7 +134,7 @@ public final class ServuxLitematica implements PluginMessageListener {
         }
     }
 
-    /** Кусок разрезанного тела. Полное тело собирается и разбирается один раз. */
+    /** A chunk of a split body. The full body is reassembled and parsed once. */
     private void onSlice(final Player player, final byte[] message) throws java.io.IOException {
         if (!REGISTERED.contains(player.getUniqueId())) {
             return;
@@ -163,11 +159,11 @@ public final class ServuxLitematica implements PluginMessageListener {
     }
 
     /**
-     * Пока — только разбор и отчёт в лог, без записи в мир.
+     * Parse and report to the log, without writing to the world.
      *
-     * <p>Так сделано намеренно. Вставка меняет мир необратимо, а формат схематики я
-     * восстанавливал по чужому коду; сначала нужно увидеть на настоящей схематике, что
-     * разбор совпадает с ожидаемым, и только потом ставить блоки.
+     * <p>Deliberate. A paste changes the world irreversibly, and the schematic format was
+     * recovered from someone else's code; the parse has to be seen matching expectations on a
+     * real schematic before any block is placed.
      */
     private void describe(final Player player, final CompoundTag request, final int size) {
         final CompoundTag schematics = request.getCompoundOrEmpty("Schematics");
@@ -210,12 +206,12 @@ public final class ServuxLitematica implements PluginMessageListener {
     }
 
     /**
-     * Собственно вставка.
+     * The paste itself.
      *
-     * <p><b>Творческий режим обязателен.</b> Так же у Servux, и по той же причине:
-     * запрос приходит от клиента и ничем не ограничен по объёму, поэтому право на канал
-     * подкрепляется ещё и режимом игры — случайно нажатая вставка в выживании не должна
-     * переписать округу.
+     * <p><b>Creative mode is required.</b> Servux does the same, for the same reason: the
+     * request comes from a client and is unbounded in size, so the channel permission is backed
+     * by the game mode as well — a paste pressed by accident in survival must not rewrite the
+     * neighbourhood.
      */
     private void place(final Player player, final CompoundTag request) {
         if (player.getGameMode() != org.bukkit.GameMode.CREATIVE) {
@@ -250,7 +246,7 @@ public final class ServuxLitematica implements PluginMessageListener {
             net.kyori.adventure.text.format.NamedTextColor.GREEN));
     }
 
-    /** Отправка в обход {@code sendPluginMessage}: причина та же, что в {@link ServuxHud}. */
+    /** Sending that bypasses {@code sendPluginMessage}, for the reason given in {@link ServuxHud}. */
     private static void send(final Player player, final byte[] body) {
         final var connection = ((CraftPlayer) player).getHandle().connection;
         if (connection != null) {

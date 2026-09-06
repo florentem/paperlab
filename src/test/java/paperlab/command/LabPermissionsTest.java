@@ -41,7 +41,7 @@ public class LabPermissionsTest {
 
         assertTrue(LabPermissions.nodes().containsKey(LabPermissions.CPLAY));
         assertTrue(LabPermissions.nodes().containsKey(LabPermissions.CPLAY_PLAYBACK));
-        assertTrue(LabPermissions.nodes().containsKey(LabPermissions.CPLAY_ADMIN));
+        assertTrue(LabPermissions.nodes().containsKey(LabPermissions.CPLAY_MANAGE));
 
         assertTrue(LabPermissions.nodes().containsKey(LabPermissions.RULE_DEFAULT));
         assertTrue(LabPermissions.nodes().containsKey("paperlab.rule.fillupdates"));
