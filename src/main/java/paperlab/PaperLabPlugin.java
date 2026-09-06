@@ -1,6 +1,7 @@
 package paperlab;
 
 import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -52,6 +53,7 @@ public final class PaperLabPlugin extends JavaPlugin implements Listener {
         this.ruleDefaults.load();
         paperlab.command.RuleCommands.bind(this.ruleDefaults);
         paperlab.rules.LabRules.applyDefaults(this.ruleDefaults, this.getLogger()::info);
+        paperlab.rules.LabRules.applyAll();
 
         // Права регистрируем до команд: их requires уже спрашивают эти узлы.
         paperlab.command.LabPermissions.register();
@@ -60,6 +62,11 @@ public final class PaperLabPlugin extends JavaPlugin implements Listener {
         Bukkit.getPluginManager().registerEvents(this, this);
         Bukkit.getPluginManager().registerEvents(new LabCounters.Listener(), this);
         Bukkit.getPluginManager().registerEvents(new paperlab.rules.TntAngleListener(), this);
+        Bukkit.getPluginManager().registerEvents(new paperlab.log.item.ItemLogListener(), this);
+        paperlab.log.movement.MovementLogListener.init();
+        Bukkit.getPluginManager().registerEvents(new paperlab.log.movement.MovementLogListener(), this);
+        paperlab.log.microtiming.MicroTimingLogListener.init();
+        Bukkit.getPluginManager().registerEvents(new paperlab.log.microtiming.MicroTimingLogListener(), this);
         if (!CoreBridge.PRESENT) {
             // Урезанная трасса спавна нужна только там, где нет полной из ядра.
             Bukkit.getPluginManager().registerEvents(new paperlab.spawn.SpawnCounters(), this);
@@ -69,17 +76,21 @@ public final class PaperLabPlugin extends JavaPlugin implements Listener {
         paperlab.servux.ServuxStructures.enable(this);
         paperlab.servux.ServuxLitematica.enable(this);
         paperlab.servux.ServuxEntities.enable(this);
+        paperlab.servux.ServuxTweaks.enable(this);
+        paperlab.cplay.CPlayService.enable(this);
 
         // Один общий тик: счётчики каждый тик, HUD раз в секунду (решает сам LabHud).
         Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> {
             LabCounters.tick();
             LabHud.tick();
+            paperlab.log.microtiming.MicroTimingLogger.flushTick();
             ChunkMapService.tick();
             paperlab.servux.ServuxHud.tick();
             paperlab.servux.ServuxStructures.tick();
         }, 1L, 1L);
 
         this.getLogger().info("PaperLab enabled - " + CoreBridge.describe());
+        this.getLogger().info("PaperLab CPlay - " + paperlab.core.CPlayBridge.describe());
     }
 
     @Override
@@ -89,7 +100,12 @@ public final class PaperLabPlugin extends JavaPlugin implements Listener {
         paperlab.servux.ServuxStructures.disable();
         paperlab.servux.ServuxLitematica.disable();
         paperlab.servux.ServuxEntities.disable();
+        paperlab.servux.ServuxTweaks.disable();
+        paperlab.cplay.CPlayService.disable();
         LabGhost.restoreAll();
+        for (final Player player : Bukkit.getOnlinePlayers()) {
+            paperlab.log.LabHud.clear(player);
+        }
         // Правила меняют поведение мира: снимать их обязательно, иначе выключенный
         // плагин оставит после себя изменённый сервер.
         paperlab.rules.LabRules.resetAll();
@@ -106,6 +122,7 @@ public final class PaperLabPlugin extends JavaPlugin implements Listener {
     @EventHandler
     public void onJoin(final org.bukkit.event.player.PlayerJoinEvent event) {
         ChunkMapService.onJoin(event.getPlayer());
+        paperlab.cplay.CPlayService.onJoin(event.getPlayer());
         LabGhost.hideGhostsFrom(event.getPlayer());
     }
 
@@ -117,6 +134,8 @@ public final class PaperLabPlugin extends JavaPlugin implements Listener {
         paperlab.servux.ServuxStructures.onQuit(event.getPlayer());
         paperlab.servux.ServuxLitematica.onQuit(event.getPlayer());
         paperlab.servux.ServuxEntities.onQuit(event.getPlayer());
+        paperlab.servux.ServuxTweaks.onQuit(event.getPlayer());
+        paperlab.cplay.CPlayService.onQuit(event.getPlayer());
         LabGhost.onDisconnect(event.getPlayer());
     }
 }

@@ -24,10 +24,19 @@
 
 Те же четыре доступны напрямую: `/ghost`, `/labspawn`, `/labchunks`.
 
+### Capture & Playback (для физики сигналов нужно ядро)
+
+```
+/playback start <ассет> [x y z]    запуск воспроизведения редстоун-сигналов
+/playback stop · pause · resume    управление воспроизведением
+/capture start <pos1> <pos2>       запись изменений блоков и редстоуна в регионе
+/cplay list · info                 локальные композиции и сессии
+```
+
 ### Как в Carpet — под теми же именами
 
 ```
-/log                       подписки в таб-лист: tps, mobcaps, counter, spawn
+/log                       подписки: tps, mobcaps, counter, spawn, item, microtiming, movement
 /counter                   счётчики воронок
 /player                    боты (нужно ядро)
 /tick toggle · /tick warp  дописаны в ванильный /tick (нужно ядро)
@@ -35,6 +44,11 @@
 /info block                состояние блока, тайл-энтити, запланированные тики
 /distance                  расстояние между точками
 ```
+
+#### Логгеры Carpet-TIS-Addition (`/log`)
+* `/log item [despawn|die|create]` — жизненный цикл предметов: появление, деспавн через 5 минут, уничтожение уроном (лава, кактус, взрывы);
+* `/log microtiming [merged|all|unique]` — замер микротиков и порядка срабатывания компонентов редстоуна (требует правило `microTiming` и метки шерстью/красителем);
+* `/log movement [селектор]` — пошаговая раскладка движения сущностей (поршни, сник, откат от края, коллизии с блоками и сущностями, например `non_zero:@a[distance=..10]`).
 
 `/carpet` — только правила и наши инструменты; команды с карпетовскими именами живут
 на верхнем уровне, как в самом моде.
@@ -53,6 +67,8 @@
 | `fillUpdates` | true | `false` — `/fill`, `/setblock`, `/clone` без обновлений соседей |
 | `tickCommandCarpetfied` | true | доступность наших узлов `/tick` |
 | `hardcodeTNTangle` | -1 | фиксированный угол разлёта TNT, в радианах |
+| `microTiming` | false | включение логгера микротаймингов компонентов редстоуна |
+| `perWorldTick` | false | независимый тикрейт, заморозка и спринт по мирам (`/tick` по измерениям) |
 
 Обычная установка **не переживает перезапуск** — намеренно: забытое правило молча
 портит все последующие замеры, числа выходят правдоподобные и ни с чем не сопоставимые.
@@ -63,14 +79,18 @@
 
 Всё дерево регистрируется в Bukkit, поэтому LuckPerms подсказывает узлы сам.
 Просмотр отделён от вмешательства: `paperlab.counter` против `paperlab.counter.edit`,
-`paperlab.ghost` против `paperlab.ghost.other`. Полный список — `/carpet perms`.
+`paperlab.ghost` против `paperlab.ghost.other`. У каждого логгера (`paperlab.log.item`,
+`paperlab.log.microtiming`, `paperlab.log.movement` и т.д.) и у каждого правила
+(`paperlab.rule.<name>`) есть собственный пермишен. Полный список — `/carpet perms`.
 
-Отдельно стоит выделить четыре:
+Отдельно стоит выделить:
 
 | Право | Почему отдельное |
 |---|---|
 | `paperlab.servux.litematics` | единственное, которое **пишет в мир** — вставка схематик |
 | `paperlab.servux.entities` | чтение NBT чужих сундуков в радиусе 128 блоков |
+| `paperlab.servux.entities.players` | чтение приватного NBT других игроков (инвентарь, эндер-сундук) |
+| `paperlab.servux.tweaks` | предпросмотр инвентарей мода Tweakeroo на расстоянии |
 | `paperlab.servux.seed` | сид мира |
 | `paperlab.rule.setdefault` | закрепить правило между перезапусками |
 
@@ -85,11 +105,15 @@
 | Мод | Канал | Что даёт |
 |---|---|---|
 | **ChunkDebug** | `chunkdebug:*` | карта статусов чанков и тикетов, F6 |
-| **MiniHUD** | `servux:hud_metadata`, `servux:structures`, `servux:entity_data` | TPS, мобкапы, рамки структур, NBT под прицелом |
-| **Litematica** | `servux:litematics` | **вставка схематик сервером** — без тысяч строк `/setblock` в чате |
+| **MiniHUD** | `servux:hud_metadata`, `servux:structures`, `servux:entity_data` | TPS, погода (таймеры дождя/грозы/ясности), мобкапы, рамки структур (с фильтром кладов), NBT под прицелом |
+| **Tweakeroo** | `servux:tweaks` | **предпросмотр инвентарей** шалкеров, сундуков и мобов на расстоянии |
+| **Litematica** | `servux:litematics` | **вставка схематик сервером** — с коррекцией поворота рельсов, ступеней и двойных сундуков (автоуступка при LitematicaFolia) |
+| **Capture & Playback** | `minecraft:mod/g4mespeed` | **запись и воспроизведение сигналов**, таймлайн, совместные сессии |
 
 Для Litematica нужно включить в её настройках `entityDataSync` (по умолчанию выключен) —
 имя обманчивое, это общий выключатель канала, на котором висит и вставка.
+
+Для **Capture & Playback** (мод для Fabric от [G4me4u](https://modrinth.com/mod/capture-playback)) реализован серверный протокол расширений G4mespeed (UID `0x4341504C` v0.8.0). Сервер хранит композиции `.gcomp` в папке `plugins/PaperLab/cplay/`, синхронизирует действия игроков в совместных сессиях и транслирует сигналы в ядро.
 
 Карта чанков шлёт **дельты**: пока стоишь на месте, трафика нет вовсе.
 
@@ -130,6 +154,9 @@ Paper 26.2 работает в mojang-маппинге, поэтому плаг�
 | трасса спавна | кап / позиция / плагин / успех | только «появилось / отменено» |
 | боты `/player` | есть | нет |
 | `fillUpdates`, `tickCommandCarpetfied` | есть | недоступны |
+| `perWorldTick` | независимый тикрейт/заморозка миров | недоступно (глобальный тикрейт ванили) |
+| физика сигналов `/playback` | есть: инъекция импульсов в мир и микротики | нет: только синхронизация ассетов и сессий в UI |
+| логгеры `microtiming` и `movement` | точный перехват микротиков редстоуна и фаз движения | недоступны без хуков ядра в `Level` и `Entity.move()` |
 | остальное | есть | есть |
 
 Запуск на чистом Paper нужен не как запасной вариант, а для контрольных прогонов:
@@ -137,10 +164,15 @@ Paper 26.2 работает в mojang-маппинге, поэтому плаг�
 
 ---
 
-## Лицензия
+## Лицензия и сторонние проекты
 
-**GPL-3.0** — [LICENSE.md](LICENSE.md). Плагин компилируется против серверных внутренностей
-Paper, а те унаследовали GPL от Spigot, Bukkit и CraftBukkit.
+Плагин распространяется под лицензией **GNU General Public License v3.0** — см. [LICENSE.md](LICENSE.md). Плагин компилируется против серверных внутренностей Paper, унаследовавших GPL от Spigot, Bukkit и CraftBukkit.
 
-Форматы протоколов ChunkDebug, Servux и Litematica восстановлены по исходникам этих модов;
-код серверной стороны написан заново.
+В проекте используются концепции, сетевые каналы и алгоритмы следующих сторонних проектов:
+* **[PaperMC](https://github.com/PaperMC/Paper)** — лицензия GPL-3.0 (сервер) / MIT (API).
+* **[Fabric Carpet](https://github.com/gnembon/fabric-carpet)** (автор [gnembon](https://github.com/gnembon)) — лицензия MIT. Концепция правил и команд `/carpet`, `/tick`, `/counter`.
+* **[Carpet-TIS-Addition](https://github.com/TISUnion/Carpet-TIS-Addition)** (команда [TIS-Union](https://github.com/TISUnion)) — лицензия LGPL-3.0. Формат и логика логгеров `/log item`, `/log movement`, `/log microtiming`.
+* **[Servux](https://github.com/maruohon/servux), [Litematica](https://github.com/maruohon/litematica), [MiniHUD](https://github.com/maruohon/minihud), [Tweakeroo](https://github.com/maruohon/tweakeroo)** (автор [maruohon](https://github.com/maruohon)) — лицензия LGPL-3.0. Сетевые каналы `servux:*` и алгоритмы геометрических трансформаций схематик.
+* **[Capture & Playback](https://modrinth.com/mod/capture-playback)** (автор [G4me4u](https://github.com/G4me4u)) — чистая независимая реализация серверного протокола G4mespeed (`minecraft:mod/g4mespeed`).
+* **[ChunkDebug](https://github.com/senseiwells/ChunkDebug)** (автор [senseiwells](https://github.com/senseiwells)) — лицензия MIT. Сетевой протокол карты статусов чанков (`chunkdebug:*`).
+

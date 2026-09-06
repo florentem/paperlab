@@ -1,12 +1,11 @@
 package paperlab.servux;
 
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.SharedConstants;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
@@ -64,6 +63,7 @@ public final class ServuxHud implements PluginMessageListener {
     private static final int S2C_METADATA = 1;
     private static final int C2S_METADATA_REQUEST = 2;
     private static final int S2C_SPAWN_DATA = 3;
+    private static final int S2C_WEATHER_TICK = 5;
     private static final int S2C_DATA_LOGGER_TICK = 7;
     private static final int C2S_SPAWN_DATA_REQUEST = 4;
     private static final int C2S_RECIPE_MANAGER_REQUEST = 6;
@@ -72,10 +72,10 @@ public final class ServuxHud implements PluginMessageListener {
 
     private static final boolean DEBUG = Boolean.getBoolean("paperlab.servux.debug");
 
-    private static final Set<UUID> REGISTERED = new HashSet<>();
+    private static final Set<UUID> REGISTERED = ConcurrentHashMap.newKeySet();
 
     /** Кто на какие логгеры подписан. Имена — как в протоколе Servux. */
-    private static final Map<UUID, Set<String>> LOGGERS = new HashMap<>();
+    private static final Map<UUID, Set<String>> LOGGERS = new ConcurrentHashMap<>();
 
     private static final String LOGGER_TPS = "tps";
     private static final String LOGGER_MOB_CAPS = "mob_caps";
@@ -83,10 +83,13 @@ public final class ServuxHud implements PluginMessageListener {
     /** Как часто уходит тик логгеров. Столько же у Servux. */
     private static final int LOGGER_PERIOD_TICKS = 15;
 
+    /** Как часто уходит тик погоды (40 тиков = 2 секунды). */
+    private static final int WEATHER_PERIOD_TICKS = 40;
+
     /** Делитель площади в ванильной формуле глобального капа: 17 x 17 чанков. */
     private static final int SPAWN_AREA_CHUNKS = 17 * 17;
 
-    private static int tickCounter;
+    private static long tickCounter;
     private static Plugin plugin;
 
     /**
@@ -181,6 +184,7 @@ public final class ServuxHud implements PluginMessageListener {
         if (DEBUG) {
             plugin.getLogger().info("Servux hud: metadata → " + player.getName());
         }
+        sendWeather(player);
     }
 
     private void sendSpawnData(final Player player) throws IOException {
@@ -235,16 +239,29 @@ public final class ServuxHud implements PluginMessageListener {
         if (wanted.isEmpty()) {
             LOGGERS.remove(player.getUniqueId());
         } else {
-            LOGGERS.put(player.getUniqueId(), wanted);
+            final Set<String> copy = Set.copyOf(wanted);
+            LOGGERS.put(player.getUniqueId(), copy);
+            sendLoggerData(player, copy);
         }
         if (DEBUG) {
             plugin.getLogger().info("Servux hud: " + player.getName() + " loggers " + wanted);
         }
     }
 
-    /** Тик логгеров. Вызывается из общего тика плагина. */
+    /** Тик логгеров и погоды. Вызывается из общего тика плагина. */
     public static void tick() {
-        if (LOGGERS.isEmpty() || ++tickCounter % LOGGER_PERIOD_TICKS != 0) {
+        tickCounter++;
+        if (tickCounter >= 1_000_000) {
+            tickCounter = 0;
+        }
+        if (!REGISTERED.isEmpty() && tickCounter % WEATHER_PERIOD_TICKS == 0) {
+            for (final Player player : Bukkit.getOnlinePlayers()) {
+                if (REGISTERED.contains(player.getUniqueId())) {
+                    sendWeather(player);
+                }
+            }
+        }
+        if (LOGGERS.isEmpty() || tickCounter % LOGGER_PERIOD_TICKS != 0) {
             return;
         }
         for (final Player player : Bukkit.getOnlinePlayers()) {
@@ -252,24 +269,80 @@ public final class ServuxHud implements PluginMessageListener {
             if (wanted == null || wanted.isEmpty()) {
                 continue;
             }
-            try {
-                final CompoundTag tag = new CompoundTag();
-                if (wanted.contains(LOGGER_TPS)) {
-                    tag.put(LOGGER_TPS, tpsData());
-                }
-                if (wanted.contains(LOGGER_MOB_CAPS)) {
-                    tag.put(LOGGER_MOB_CAPS, mobCapData(player));
-                }
-                send(player, ServuxWire.data(S2C_DATA_LOGGER_TICK, tag));
-            } catch (final Throwable t) {
-                plugin.getLogger().warning("Servux hud: logger tick failed for "
+            sendLoggerData(player, wanted);
+        }
+    }
+
+    private static void sendLoggerData(final Player player, final Set<String> wanted) {
+        try {
+            final CompoundTag tag = new CompoundTag();
+            if (wanted.contains(LOGGER_TPS)) {
+                tag.put(LOGGER_TPS, tpsData());
+            }
+            if (wanted.contains(LOGGER_MOB_CAPS)) {
+                tag.put(LOGGER_MOB_CAPS, mobCapData());
+            }
+            send(player, ServuxWire.data(S2C_DATA_LOGGER_TICK, tag));
+        } catch (final Throwable t) {
+            plugin.getLogger().warning("Servux hud: logger send failed for "
+                + player.getName() + ": " + t);
+            LOGGERS.remove(player.getUniqueId());
+        }
+    }
+
+    private static void sendWeather(final Player player) {
+        if (!REGISTERED.contains(player.getUniqueId())) {
+            return;
+        }
+        try {
+            send(player, ServuxWire.data(S2C_WEATHER_TICK, weatherData(player)));
+        } catch (final Throwable t) {
+            if (DEBUG) {
+                plugin.getLogger().warning("Servux hud: failed to send weather to "
                     + player.getName() + ": " + t);
-                LOGGERS.remove(player.getUniqueId());
             }
         }
     }
 
-    private static CompoundTag tpsData() {
+    public static CompoundTag weatherData(final Player player) {
+        final org.bukkit.World world = Bukkit.getWorlds().isEmpty()
+            ? (player != null ? player.getWorld() : null)
+            : Bukkit.getWorlds().get(0);
+        final CompoundTag tag = new CompoundTag();
+        if (world == null) {
+            tag.putBoolean("isRaining", false);
+            tag.putBoolean("isThundering", false);
+            tag.putInt("SetClear", 24000);
+            return tag;
+        }
+        final ServerLevel overworld = ((CraftWorld) world).getHandle();
+        final boolean raining = overworld.isRaining();
+        final boolean thundering = overworld.isThundering();
+        final var nmsWeather = overworld.getWeatherData();
+        final int clearTime = nmsWeather.getClearWeatherTime();
+        final int rainTime = nmsWeather.getRainTime();
+        final int thunderTime = nmsWeather.getThunderTime();
+
+        if (raining && rainTime > -1) {
+            tag.putInt("SetRaining", rainTime);
+            tag.putBoolean("isRaining", true);
+        } else {
+            tag.putBoolean("isRaining", false);
+            final int clearRemaining = clearTime > 0 ? clearTime : (rainTime > 0 ? rainTime : 0);
+            tag.putInt("SetClear", clearRemaining);
+        }
+
+        if (thundering && thunderTime > -1) {
+            tag.putInt("SetThundering", thunderTime);
+            tag.putBoolean("isThundering", true);
+        } else {
+            tag.putBoolean("isThundering", false);
+        }
+
+        return tag;
+    }
+
+    public static CompoundTag tpsData() {
         final var manager = Bukkit.getServerTickManager();
         final CompoundTag tag = new CompoundTag();
         tag.putDouble("mspt", Bukkit.getAverageTickTime());
@@ -283,41 +356,42 @@ public final class ServuxHud implements PluginMessageListener {
     }
 
     /**
-     * Мобкапы в том виде, в каком их ждёт MiniHUD, — <b>мировые</b>, по ванильной формуле
-     * {@code maxPerChunk * пригодных чанков / 289}.
-     *
-     * <p><b>Важно, что это не тот кап, который на Paper решает.</b> При
-     * {@code per-player-mob-spawns} спавн гасит локальный кап каждого игрока, а не эта
-     * мировая сумма; она остаётся справочной. Настоящий, решающий кап показывает наш
-     * {@code /log mobcaps} — и цифры там законно другие.
-     *
-     * <p>Отдаём всё равно: у MiniHUD это штатная строка HUD, а расхождение объясняется
-     * один раз и дальше читается правильно.
+     * Мобкапы в том виде, в каком их ждёт MiniHUD.
+     * MiniHUD ожидает компаунд сопоставлений dimKey -> { WorldTick, cap_count, cap_data: [...] }.
+     * Каждая запись cap_data содержит { current, cap }.
      */
-    private static CompoundTag mobCapData(final Player player) {
-        final ServerLevel level = ((CraftWorld) player.getWorld()).getHandle();
-        final NaturalSpawner.SpawnState state = level.getChunkSource().getLastSpawnState();
+    public static CompoundTag mobCapData() {
+        final CompoundTag root = new CompoundTag();
+        for (final org.bukkit.World bukkitWorld : Bukkit.getWorlds()) {
+            final ServerLevel world = ((CraftWorld) bukkitWorld).getHandle();
+            final String dimKey = world.dimension().identifier().toString();
+            final NaturalSpawner.SpawnState state = world.getChunkSource().getLastSpawnState();
 
-        final ListTag caps = new ListTag();
-        // Порядок обязан совпадать с MobCapData.EntityCategory: клиент читает список
-        // по индексу, а не по имени.
-        for (final MobCategory category : MobCategory.values()) {
-            final CompoundTag cap = new CompoundTag();
-            if (state == null) {
-                cap.putInt("current", 0);
-                cap.putInt("cap", 0);
-            } else {
-                cap.putInt("current", state.getMobCategoryCounts().getInt(category));
-                cap.putInt("cap", category.getMaxInstancesPerChunk()
-                    * state.getSpawnableChunkCount() / SPAWN_AREA_CHUNKS);
+            final ListTag caps = new ListTag();
+            final int spawnableChunks = state != null ? state.getSpawnableChunkCount() : 0;
+
+            for (final MobCategory category : MobCategory.values()) {
+                final CompoundTag cap = new CompoundTag();
+                if (state == null || spawnableChunks <= 0) {
+                    cap.putInt("current", 0);
+                    cap.putInt("cap", 0);
+                } else {
+                    final int current = state.getMobCategoryCounts().getInt(category);
+                    final int capacity = category.getMaxInstancesPerChunk() * spawnableChunks / SPAWN_AREA_CHUNKS;
+                    cap.putInt("current", current);
+                    cap.putInt("cap", capacity);
+                }
+                caps.add(cap);
             }
-            caps.add(cap);
-        }
 
-        final CompoundTag tag = new CompoundTag();
-        tag.putInt("cap_count", MobCategory.values().length);
-        tag.put("cap_data", caps);
-        return tag;
+            final CompoundTag nbtEntry = new CompoundTag();
+            nbtEntry.putLong("WorldTick", world.getGameTime());
+            nbtEntry.putInt("cap_count", MobCategory.values().length);
+            nbtEntry.put("cap_data", caps);
+
+            root.put(dimKey, nbtEntry);
+        }
+        return root;
     }
 
     /**

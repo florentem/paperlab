@@ -132,6 +132,51 @@ public final class LabRules {
             // но до первого тика скорость ещё никто не читал.
         }));
 
+    /**
+     * Включение сбора и вывода микротаймингов редстоуна (/log microtiming).
+     *
+     * <p>Как в Carpet-TIS-Addition, правило microTiming активирует трекеры для
+     * компонентов, помеченных шерстью или маркерами красителей.
+     */
+    public static final LabRule<Boolean> MICRO_TIMING = register(new LabRule<>(
+        "microTiming",
+        "enable redstone components microtiming logger",
+        "log actions and updates of blocks marked with wool or dye",
+        Boolean.FALSE,
+        List.of("false", "true"),
+        BOOLEAN,
+        PLAIN::apply,
+        value -> null,
+        value -> {
+            if (CoreBridge.PRESENT) {
+                io.papermc.paper.lab.microtiming.LabMicroTiming.enabled = value;
+            }
+        }));
+
+    /**
+     * Независимый тикрейт, заморозка и спринт по мирам (/tick freeze, rate и т.д.).
+     *
+     * <p>При включении каждый мир тикает независимо со своим ServerLevelTickRateManager.
+     * При выключении все миры синхронизируются с Overworld и сервером.
+     */
+    public static final LabRule<Boolean> PER_WORLD_TICK = register(new LabRule<>(
+        "perWorldTick",
+        "independent tick rate, freeze and sprint per world/dimension",
+        "allows /tick commands to execute independently per dimension",
+        Boolean.FALSE,
+        List.of("false", "true"),
+        BOOLEAN,
+        PLAIN::apply,
+        value -> null,
+        value -> {
+            if (CoreBridge.PRESENT) {
+                final org.bukkit.Server bServer = org.bukkit.Bukkit.getServer();
+                final net.minecraft.server.MinecraftServer server =
+                    (bServer instanceof final org.bukkit.craftbukkit.CraftServer cs) ? cs.getServer() : null;
+                io.papermc.paper.lab.tick.LabPerWorldTick.setEnabled(value, server);
+            }
+        }));
+
     private LabRules() {
     }
 
@@ -156,7 +201,7 @@ public final class LabRules {
      * чем отсутствующее.
      */
     public static boolean available(final LabRule<?> rule) {
-        if (rule == HARDCODE_TNT_ANGLE) {
+        if (rule == HARDCODE_TNT_ANGLE || rule == MICRO_TIMING) {
             return true;
         }
         return CoreBridge.PRESENT;
@@ -177,6 +222,26 @@ public final class LabRules {
     public static void resetAll() {
         for (final LabRule<?> rule : RULES.values()) {
             rule.reset();
+        }
+        // Ядро по умолчанию «спит» — команды выключены. Возвращаем их в спящее состояние.
+        if (CoreBridge.PRESENT) {
+            io.papermc.paper.lab.rules.LabRuleState.playerCommandEnabled = false;
+            io.papermc.paper.lab.rules.LabRuleState.tickCommandCarpetfied = false;
+        }
+    }
+
+    /**
+     * Передать текущие значения всех правил в ядро. Вызывается при включении плагина,
+     * потому что ядро по умолчанию «спит»: все флаги выключены до тех пор, пока плагин
+     * явно не установит нужные значения.
+     */
+    public static void applyAll() {
+        for (final LabRule<?> rule : RULES.values()) {
+            rule.reapply();
+        }
+        // Команды /player и /tick toggle|warp — включаем при наличии ядра.
+        if (CoreBridge.PRESENT) {
+            io.papermc.paper.lab.rules.LabRuleState.playerCommandEnabled = true;
         }
     }
 

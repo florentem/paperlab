@@ -67,7 +67,19 @@ public final class ServuxWire {
     public static CompoundTag readCompressedNbt(final byte[] data) throws IOException {
         final int prefix = varIntLength(data);
 
-        // 1. Длина + GZIP.
+        // 1. Сетевой NBT сразу после типа (как шлёт MiniHUD / Litematica).
+        try {
+            final FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.wrappedBuffer(data));
+            buf.readVarInt();
+            final CompoundTag tag = buf.readNbt();
+            if (tag != null) {
+                return tag;
+            }
+        } catch (final Throwable ignored) {
+            // следующий вариант
+        }
+
+        // 2. Длина + GZIP.
         try {
             final FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.wrappedBuffer(data));
             buf.readVarInt();
@@ -82,7 +94,7 @@ public final class ServuxWire {
             // следующий вариант
         }
 
-        // 2. Длина + несжатый именованный NBT.
+        // 3. Длина + несжатый именованный NBT.
         try {
             final FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.wrappedBuffer(data));
             buf.readVarInt();
@@ -91,18 +103,6 @@ public final class ServuxWire {
                 final byte[] body = new byte[length];
                 buf.readBytes(body);
                 return NbtIo.read(new DataInputStream(new ByteArrayInputStream(body)));
-            }
-        } catch (final Throwable ignored) {
-            // следующий вариант
-        }
-
-        // 3. Сетевой NBT сразу после типа.
-        try {
-            final FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.wrappedBuffer(data));
-            buf.readVarInt();
-            final CompoundTag tag = buf.readNbt();
-            if (tag != null) {
-                return tag;
             }
         } catch (final Throwable ignored) {
             // не подошло ничего
@@ -229,13 +229,9 @@ public final class ServuxWire {
     }
 
     /**
-     * Дописать тело в кадре malilib: {@code varint(-1)} и следом сетевой NBT.
-     *
-     * <p>Минус единица — то, что malilib пишет вместо длины. Установлено по дампу
-     * настоящего пакета Litematica: {@code ff ff ff ff 0f | 0a | ...}.
+     * Дописать сетевой NBT в буфер.
      */
     public static void appendNbtBody(final FriendlyByteBuf buf, final CompoundTag tag) {
-        buf.writeVarInt(-1);
         buf.writeNbt(tag);
     }
 
@@ -248,21 +244,11 @@ public final class ServuxWire {
     }
 
     /**
-     * Собрать обычный кадр.
+     * Собрать data-кадр Servux: varint(type) + сетевой NBT.
      *
-     * <p><b>Кадр тот же, что у metadata: сетевой NBT.</b> Это выяснилось дорого. Servux
-     * пишет «длина + GZIP» и читает его же, и я повторил за ним — но клиент берёт кодек
-     * из malilib, а там сетевой NBT. Клиент прочитал наш NBT-заголовок, остаток не тронул,
-     * и ванильный декодер убил соединение:
-     *
-     * <pre>
-     * Packet play/clientbound/minecraft:custom_payload was larger than I expected,
-     * found 104 bytes extra
-     * </pre>
-     *
-     * <p>Урок общий: сверять кадрирование нужно с <b>клиентским</b> кодом, а не с серверным.
-     * Мод и его серверная часть писались не совсем согласованно, и расходятся они молча —
-     * до того момента, когда рвут соединение.
+     * <p>Клиент MiniHUD читает все типы пакетов (SPAWN_DATA, WEATHER_TICK, DATA_LOGGER_TICK)
+     * через {@code FriendlyByteBuf.readNbt()}. Любые префиксы длины или GZIP оставляют
+     * непрочитанные байты в Netty-буфере и приводят к кику клиента с DecoderException.
      */
     public static byte[] data(final int type, final CompoundTag tag) {
         return metadata(type, tag);
@@ -271,6 +257,7 @@ public final class ServuxWire {
     private static byte[] drain(final FriendlyByteBuf buf) {
         final byte[] out = new byte[buf.readableBytes()];
         buf.readBytes(out);
+        buf.release();
         return out;
     }
 }

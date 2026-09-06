@@ -32,6 +32,9 @@ public final class LabPermissions {
     public static final String LOG_MOBCAPS = "paperlab.log.mobcaps";
     public static final String LOG_COUNTER = "paperlab.log.counter";
     public static final String LOG_SPAWN = "paperlab.log.spawn";
+    public static final String LOG_ITEM = "paperlab.log.item";
+    public static final String LOG_MICROTIMING = "paperlab.log.microtiming";
+    public static final String LOG_MOVEMENT = "paperlab.log.movement";
     public static final String CHUNKS = "paperlab.chunks";
     public static final String CHUNKMAP = "paperlab.chunkmap";
     public static final String SPAWN = "paperlab.spawn";
@@ -83,12 +86,27 @@ public final class LabPermissions {
      */
     public static final String SERVUX_ENTITIES = "paperlab.servux.entities";
 
+    /**
+     * Право на просмотр NBT других игроков (инвентарь, эндер-сундук, здоровье).
+     * Без него запрос NBT чужого игрока через Servux отклоняется.
+     */
+    public static final String SERVUX_ENTITIES_PLAYERS = "paperlab.servux.entities.players";
+
+    /** Канал servux:tweaks: предпросмотр инвентарей мода Tweakeroo. */
+    public static final String SERVUX_TWEAKS = "paperlab.servux.tweaks";
+
     // --- вмешательство ---
     public static final String COUNTER_EDIT = "paperlab.counter.edit";
     public static final String GHOST = "paperlab.ghost";
     public static final String GHOST_OTHER = "paperlab.ghost.other";
     public static final String TICK = "paperlab.tick";
     public static final String PLAYER = "paperlab.player";
+
+    // --- Capture & Playback ---
+    public static final String CPLAY = "paperlab.cplay";
+    public static final String CPLAY_PLAYBACK = "paperlab.cplay.playback";
+    public static final String CPLAY_CAPTURE = "paperlab.cplay.capture";
+    public static final String CPLAY_MANAGE = "paperlab.cplay.manage";
 
     /**
      * Право сохранять значение правила между перезапусками.
@@ -108,6 +126,9 @@ public final class LabPermissions {
         NODES.put(LOG_MOBCAPS, "local mobcap subscription, including other players");
         NODES.put(LOG_COUNTER, "hopper counter subscription");
         NODES.put(LOG_SPAWN, "spawn trace subscription");
+        NODES.put(LOG_ITEM, "item lifecycle: created, despawned, died");
+        NODES.put(LOG_MICROTIMING, "redstone components microtiming: merged, all, unique");
+        NODES.put(LOG_MOVEMENT, "entity movement calculation breakdown");
         NODES.put(CHUNKS, "chunk status summary around a player");
         NODES.put(CHUNKMAP, "chunk map for the ChunkDebug client mod");
         NODES.put(SPAWN, "spawn trace: view and control collection");
@@ -121,11 +142,17 @@ public final class LabPermissions {
         NODES.put(SERVUX_STRUCTURES, "servux:structures channel for MiniHUD");
         NODES.put(SERVUX_LITEMATICS, "servux:litematics channel: server-side schematic paste");
         NODES.put(SERVUX_ENTITIES, "servux:entity_data channel: entity and block entity NBT");
+        NODES.put(SERVUX_ENTITIES_PLAYERS, "inspect other players' private inventory/NBT via Servux");
+        NODES.put(SERVUX_TWEAKS, "servux:tweaks channel: Tweakeroo inventory preview");
         NODES.put(COUNTER_EDIT, "reset counters and put hoppers under tracking");
         NODES.put(GHOST, "observer mode for yourself");
         NODES.put(GHOST_OTHER, "observer mode for another player or bot");
         NODES.put(TICK, "tick freeze, step and warp");
         NODES.put(PLAYER, "bots: create, act, remove");
+        NODES.put(CPLAY, "Capture & Playback mod integration and asset access");
+        NODES.put(CPLAY_PLAYBACK, "playback redstone captures into the world");
+        NODES.put(CPLAY_CAPTURE, "capture redstone signals into assets");
+        NODES.put(CPLAY_MANAGE, "manage all Capture & Playback assets");
         NODES.put(RULE_DEFAULT, "persist rule values across restarts");
         // По праву на каждое правило: правила меняют поведение мира, и раздавать их
         // скопом нельзя — кому-то нужен только fillUpdates и ничего больше.

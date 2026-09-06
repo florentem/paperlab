@@ -46,10 +46,16 @@ public final class LabCounters {
     private record Key(String world, DyeColor colour) {
     }
 
-    private static final Map<Key, LabCounter> COUNTERS = new LinkedHashMap<>();
+    public record BlockPosKey(String worldName, int x, int y, int z) {
+        public static BlockPosKey of(final Block block) {
+            return new BlockPosKey(block.getWorld().getName(), block.getX(), block.getY(), block.getZ());
+        }
+    }
+
+    private static final Map<Key, LabCounter> COUNTERS = new java.util.concurrent.ConcurrentHashMap<>();
 
     /** Отслеживаемые воронки: местоположение → цвет шерсти, в которую она смотрит. */
-    private static final Map<Location, DyeColor> TRACKED = new LinkedHashMap<>();
+    private static final Map<BlockPosKey, DyeColor> TRACKED = new java.util.concurrent.ConcurrentHashMap<>();
 
     private LabCounters() {
     }
@@ -70,11 +76,12 @@ public final class LabCounters {
     /** Добавить воронку под наблюдение, если она смотрит в шерсть. */
     public static boolean track(final Block block) {
         final DyeColor colour = targetColour(block);
+        final BlockPosKey key = BlockPosKey.of(block);
         if (colour == null) {
-            TRACKED.remove(block.getLocation());
+            TRACKED.remove(key);
             return false;
         }
-        TRACKED.put(block.getLocation(), colour);
+        TRACKED.put(key, colour);
         return true;
     }
 
@@ -106,22 +113,22 @@ public final class LabCounters {
         if (TRACKED.isEmpty()) {
             return;
         }
-        final Set<Location> stale = new HashSet<>();
-        for (final Map.Entry<Location, DyeColor> entry : TRACKED.entrySet()) {
-            final Location location = entry.getKey();
-            final World world = location.getWorld();
-            if (world == null || !world.isChunkLoaded(location.getBlockX() >> 4, location.getBlockZ() >> 4)) {
+        final Set<BlockPosKey> stale = new HashSet<>();
+        for (final Map.Entry<BlockPosKey, DyeColor> entry : TRACKED.entrySet()) {
+            final BlockPosKey posKey = entry.getKey();
+            final World world = Bukkit.getWorld(posKey.worldName());
+            if (world == null || !world.isChunkLoaded(posKey.x() >> 4, posKey.z() >> 4)) {
                 continue;
             }
-            final Block block = location.getBlock();
+            final Block block = world.getBlockAt(posKey.x(), posKey.y(), posKey.z());
             final DyeColor colour = targetColour(block);
             if (colour == null) {
                 // Воронку сломали или развернули — снимаем с наблюдения.
-                stale.add(location);
+                stale.add(posKey);
                 continue;
             }
             if (!(block.getState() instanceof final Hopper hopper)) {
-                stale.add(location);
+                stale.add(posKey);
                 continue;
             }
             final LabCounter counter = of(world, colour);
@@ -141,7 +148,7 @@ public final class LabCounters {
                 hopper.update();
             }
         }
-        TRACKED.keySet().removeAll(stale);
+        stale.forEach(TRACKED::remove);
     }
 
     public static LabCounter of(final World world, final DyeColor colour) {

@@ -3,7 +3,7 @@ plugins {
 }
 
 group = "paperlab"
-version = "1.0.0"
+version = "1.0.5"
 
 repositories {
     mavenCentral()
@@ -19,7 +19,7 @@ repositories {
 //
 // Побочный эффект: плагин привязан к конкретной сборке сервера. Для стенда это
 // приемлемо, для распространения — нет.
-val forkLibs = file("../../fork/paper-lab")
+val forkLibs = if (file("../paperlab-core").exists()) file("../paperlab-core") else file("../../fork/paper-lab")
 
 dependencies {
     // paper-api из репозитория — ради транзитивных adventure, brigadier, netty и аннотаций.
@@ -33,8 +33,23 @@ dependencies {
     // netty — буферы протокола, DFU и jspecify — аннотации в сигнатурах NMS-классов.
     // Версии пиним: floating-диапазоны в проверяемой сборке недопустимы.
     compileOnly("io.netty:netty-buffer:4.2.2.Final")
-    compileOnly("com.mojang:datafixerupper:8.0.16")
+    compileOnly("com.mojang:datafixerupper:9.0.19")
     compileOnly("org.jspecify:jspecify:1.0.0")
+
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation("io.papermc.paper:paper-api:26.2.build.92-stable")
+    testImplementation(files("$forkLibs/paper-server/build/libs/paper-server-26.2.local-SNAPSHOT.jar"))
+    testImplementation("io.netty:netty-buffer:4.2.2.Final")
+    testImplementation("io.netty:netty-codec:4.2.2.Final")
+    testImplementation("com.mojang:datafixerupper:9.0.19")
+    testImplementation("org.jspecify:jspecify:1.0.0")
+    testImplementation("ca.spottedleaf:concurrentutil:0.0.3")
+    testImplementation("ca.spottedleaf:leafpile:1.0.0")
+    testImplementation("com.mojang:authlib:7.0.63")
+    testImplementation("it.unimi.dsi:fastutil:8.5.15")
+    testImplementation("io.leangen.geantyref:geantyref:1.3.15")
+    testImplementation("net.kyori:adventure-text-serializer-ansi:5.2.0")
 }
 
 java {
@@ -46,6 +61,10 @@ java {
 tasks {
     compileJava {
         options.encoding = "UTF-8"
+    }
+
+    test {
+        useJUnitPlatform()
     }
 
     processResources {

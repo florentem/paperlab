@@ -106,6 +106,7 @@ public final class ChunkMapService implements PluginMessageListener {
     /** Отозвать доступ: мод погасит карту. */
     public static void sendBye(final Player player) {
         WATCHERS.remove(player.getUniqueId());
+        SENT.remove(player.getUniqueId());
         send(player, ChunkMapWire.BYE, new byte[0]);
     }
 

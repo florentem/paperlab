@@ -1,9 +1,9 @@
 package paperlab.servux;
 
 import io.netty.buffer.Unpooled;
-import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
@@ -70,7 +70,7 @@ public final class ServuxEntities implements PluginMessageListener {
 
     private static final boolean DEBUG = Boolean.getBoolean("paperlab.servux.debug");
 
-    private static final Set<UUID> REGISTERED = new HashSet<>();
+    private static final Set<UUID> REGISTERED = ConcurrentHashMap.newKeySet();
     private static Plugin plugin;
 
     public static void enable(final Plugin owner) {
@@ -108,8 +108,19 @@ public final class ServuxEntities implements PluginMessageListener {
             switch (type) {
                 case C2S_METADATA_REQUEST -> onRegister(player);
                 case C2S_UNREGISTER_REPLY -> REGISTERED.remove(player.getUniqueId());
-                case C2S_BLOCK_ENTITY_REQUEST -> onBlockRequest(player, buf.readBlockPos());
-                case C2S_ENTITY_REQUEST -> onEntityRequest(player, buf.readVarInt());
+                case C2S_BLOCK_ENTITY_REQUEST -> {
+                    // MiniHUD 0.40.4 шлёт varint transactionId перед BlockPos (8 байт).
+                    if (buf.readableBytes() > 8) {
+                        buf.readVarInt();
+                    }
+                    onBlockRequest(player, buf.readBlockPos());
+                }
+                case C2S_ENTITY_REQUEST -> {
+                    // MiniHUD 0.40.4 шлёт varint transactionId перед varint entityId.
+                    final int first = buf.readVarInt();
+                    final int entityId = buf.isReadable() ? buf.readVarInt() : first;
+                    onEntityRequest(player, entityId);
+                }
                 default -> {
                 }
             }
@@ -176,8 +187,17 @@ public final class ServuxEntities implements PluginMessageListener {
         if (entity == null || !withinReach(player, entity.getX(), entity.getY(), entity.getZ())) {
             return;
         }
+        if (entity instanceof net.minecraft.server.level.ServerPlayer targetPlayer
+            && !targetPlayer.getUUID().equals(player.getUniqueId())
+            && !player.hasPermission(LabPermissions.SERVUX_ENTITIES_PLAYERS)) {
+            return;
+        }
         final CompoundTag data = capture(level, entity.problemPath(),
             output -> entity.saveWithoutId(output));
+        final var typeKey = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
+        if (typeKey != null) {
+            data.putString("id", typeKey.toString());
+        }
 
         final FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
         buf.writeVarInt(S2C_ENTITY_NBT_RESPONSE);
@@ -192,10 +212,10 @@ public final class ServuxEntities implements PluginMessageListener {
      * <p>В 26.2 сущности и тайл-энтити пишутся не в {@code CompoundTag} напрямую, а через
      * {@code ValueOutput}; для отправки по проводу нужен именно компаунд.
      */
-    private static CompoundTag capture(final ServerLevel level,
-                                       final net.minecraft.util.ProblemReporter.PathElement path,
-                                       final java.util.function.Consumer<
-                                           net.minecraft.world.level.storage.ValueOutput> writer) {
+    static CompoundTag capture(final ServerLevel level,
+                               final net.minecraft.util.ProblemReporter.PathElement path,
+                               final java.util.function.Consumer<
+                                   net.minecraft.world.level.storage.ValueOutput> writer) {
         try (final net.minecraft.util.ProblemReporter.ScopedCollector reporter =
                  new net.minecraft.util.ProblemReporter.ScopedCollector(
                      path, org.slf4j.LoggerFactory.getLogger("PaperLab"))) {
@@ -222,6 +242,7 @@ public final class ServuxEntities implements PluginMessageListener {
     private static byte[] drain(final FriendlyByteBuf buf) {
         final byte[] out = new byte[buf.readableBytes()];
         buf.readBytes(out);
+        buf.release();
         return out;
     }
 

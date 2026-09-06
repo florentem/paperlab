@@ -5,6 +5,14 @@ api-version: '26.2'
 description: Технический инструментарий для исследования ферм на Paper 26.2
 authors: [ oCreker ]
 
-# Боты намеренно не реализуются: для них ставится FakePlayer-CE.
-# Если он установлен, /log mobcaps и /ghost работают и с его ботами —
-# они обычные ServerPlayer.
+# Поддерживаются как встроенные боты ядра (/player), так и внешний FakePlayer-CE.
+# /log mobcaps и /ghost работают с любыми ботами (они обычные ServerPlayer).
+
+dependencies:
+  server:
+    LitematicaFolia:
+      load: BEFORE
+      required: false
+    TAB:
+      load: BEFORE
+      required: false

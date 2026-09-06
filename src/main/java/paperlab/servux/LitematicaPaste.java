@@ -5,16 +5,25 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.ChestBlock;
+import net.minecraft.world.level.block.DetectorRailBlock;
 import net.minecraft.world.level.block.Mirror;
+import net.minecraft.world.level.block.PoweredRailBlock;
+import net.minecraft.world.level.block.RailBlock;
 import net.minecraft.world.level.block.Rotation;
+import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.ChestType;
+import net.minecraft.world.level.block.state.properties.RailShape;
+import net.minecraft.world.level.block.state.properties.StairsShape;
 
 /**
  * Установка схематики Litematica на сервере.
@@ -180,6 +189,9 @@ public final class LitematicaPaste {
             final double x = pos.x + offX;
             final double y = pos.y + offY;
             final double z = pos.z + offZ;
+            if (!level.hasChunk((int) Math.floor(x) >> 4, (int) Math.floor(z) >> 4)) {
+                continue;
+            }
 
             try {
                 final net.minecraft.world.entity.Entity entity =
@@ -263,6 +275,10 @@ public final class LitematicaPaste {
         final int sizeX = Math.abs(regionSize.getX());
         final int sizeY = Math.abs(regionSize.getY());
         final int sizeZ = Math.abs(regionSize.getZ());
+        final long volume = (long) sizeX * sizeY * sizeZ;
+        if (volume <= 0L || volume > 20_000_000L) {
+            return new Result(0, 0, 0, 0);
+        }
         final int bits = Math.max(2, Integer.SIZE - Integer.numberOfLeadingZeros(palette.length - 1));
         final long mask = (1L << bits) - 1L;
 
@@ -311,7 +327,7 @@ public final class LitematicaPaste {
                     target = transform(target, subMirror, subRotation);
                     target = target.offset(regionPosTransformed).offset(origin);
 
-                    if (level.isOutsideBuildHeight(target)) {
+                    if (level.isOutsideBuildHeight(target) || !level.hasChunk(target.getX() >> 4, target.getZ() >> 4)) {
                         skipped++;
                         continue;
                     }
@@ -324,13 +340,13 @@ public final class LitematicaPaste {
                     }
 
                     if (mainMirror != Mirror.NONE) {
-                        state = state.mirror(mainMirror);
+                        state = applyMirror(state, mainMirror);
                     }
                     if (subMirror != Mirror.NONE) {
-                        state = state.mirror(subMirror);
+                        state = applyMirror(state, subMirror);
                     }
                     if (combined != Rotation.NONE) {
-                        state = state.rotate(combined);
+                        state = applyRotation(state, combined);
                     }
 
                     if (old == state && !state.hasBlockEntity()) {
@@ -485,5 +501,99 @@ public final class LitematicaPaste {
     private static Mirror mirror(final int ordinal) {
         final Mirror[] values = Mirror.values();
         return ordinal >= 0 && ordinal < values.length ? values[ordinal] : Mirror.NONE;
+    }
+
+    /**
+     * Отражение блока с исправлением известных ванильных багов (двойные сундуки, ступени).
+     */
+    public static BlockState applyMirror(final BlockState state, final Mirror mirror) {
+        if (mirror == Mirror.NONE) {
+            return state;
+        }
+        if (state.getBlock() instanceof StairBlock) {
+            return fixStairsMirror(state, mirror);
+        }
+        if (state.getBlock() instanceof ChestBlock) {
+            final ChestType type = state.getValue(ChestBlock.TYPE);
+            if (type != ChestType.SINGLE) {
+                return fixChestMirror(state, mirror, type);
+            }
+        }
+        return state.mirror(mirror);
+    }
+
+    /**
+     * Поворот блока с исправлением ванильного бага поворота прямых рельсов на 180°.
+     */
+    public static BlockState applyRotation(final BlockState state, final Rotation rotation) {
+        if (rotation == Rotation.NONE) {
+            return state;
+        }
+        if (rotation == Rotation.CLOCKWISE_180 && isStraightRail(state)) {
+            return state;
+        }
+        return state.rotate(rotation);
+    }
+
+    private static boolean isStraightRail(final BlockState state) {
+        if (state.getBlock() instanceof RailBlock) {
+            final RailShape shape = state.getValue(RailBlock.SHAPE);
+            return shape == RailShape.EAST_WEST || shape == RailShape.NORTH_SOUTH;
+        }
+        if (state.getBlock() instanceof DetectorRailBlock) {
+            final RailShape shape = state.getValue(DetectorRailBlock.SHAPE);
+            return shape == RailShape.EAST_WEST || shape == RailShape.NORTH_SOUTH;
+        }
+        if (state.getBlock() instanceof PoweredRailBlock) {
+            final RailShape shape = state.getValue(PoweredRailBlock.SHAPE);
+            return shape == RailShape.EAST_WEST || shape == RailShape.NORTH_SOUTH;
+        }
+        return false;
+    }
+
+    private static BlockState fixStairsMirror(final BlockState state, final Mirror mirror) {
+        final Direction direction = state.getValue(StairBlock.FACING);
+        final StairsShape stairShape = state.getValue(StairBlock.SHAPE);
+
+        // Fixes X Axis for FRONT_BACK being inverted for INNER_LEFT / INNER_RIGHT
+        if (direction.getAxis() == Direction.Axis.X && mirror == Mirror.FRONT_BACK) {
+            return switch (stairShape) {
+                case INNER_LEFT  -> state.rotate(Rotation.CLOCKWISE_180).setValue(StairBlock.SHAPE, StairsShape.INNER_RIGHT);
+                case INNER_RIGHT -> state.rotate(Rotation.CLOCKWISE_180).setValue(StairBlock.SHAPE, StairsShape.INNER_LEFT);
+                case OUTER_LEFT  -> state.rotate(Rotation.CLOCKWISE_180).setValue(StairBlock.SHAPE, StairsShape.OUTER_RIGHT);
+                case OUTER_RIGHT -> state.rotate(Rotation.CLOCKWISE_180).setValue(StairBlock.SHAPE, StairsShape.OUTER_LEFT);
+                default          -> state.rotate(Rotation.CLOCKWISE_180);
+            };
+        }
+        // Fixes missing Axis STAIR_SHAPE flips
+        if ((direction.getAxis() == Direction.Axis.X && mirror == Mirror.LEFT_RIGHT)
+            || (direction.getAxis() == Direction.Axis.Z && mirror == Mirror.FRONT_BACK)) {
+            return switch (stairShape) {
+                case INNER_LEFT  -> state.setValue(StairBlock.SHAPE, StairsShape.INNER_RIGHT);
+                case INNER_RIGHT -> state.setValue(StairBlock.SHAPE, StairsShape.INNER_LEFT);
+                case OUTER_LEFT  -> state.setValue(StairBlock.SHAPE, StairsShape.OUTER_RIGHT);
+                case OUTER_RIGHT -> state.setValue(StairBlock.SHAPE, StairsShape.OUTER_LEFT);
+                default          -> state;
+            };
+        }
+        return state.mirror(mirror);
+    }
+
+    private static BlockState fixChestMirror(BlockState state, final Mirror mirror, final ChestType type) {
+        final Direction facing = state.getValue(ChestBlock.FACING);
+        final Direction.Axis axis = facing.getAxis();
+
+        if (mirror == Mirror.FRONT_BACK) {
+            state = state.setValue(ChestBlock.TYPE, type.getOpposite());
+            if (axis == Direction.Axis.X) {
+                state = state.setValue(ChestBlock.FACING, facing.getOpposite());
+            }
+        } else if (mirror == Mirror.LEFT_RIGHT) {
+            state = state.setValue(ChestBlock.TYPE, type.getOpposite());
+            if (axis == Direction.Axis.Z) {
+                state = state.setValue(ChestBlock.FACING, facing.getOpposite());
+            }
+        }
+        return state;
     }
 }

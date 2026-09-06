@@ -96,6 +96,14 @@ public final class LabLogCommand {
                 }
             } else if (logger == LabLoggers.SPAWN) {
                 opts.addAll(paperlab.spawn.SpawnView.options());
+            } else if (logger == LabLoggers.ITEM) {
+                opts.addAll(logger.options());
+            } else if (logger == LabLoggers.MICROTIMING) {
+                opts.addAll(logger.options());
+            } else if (logger == LabLoggers.MOVEMENT) {
+                opts.addAll(logger.options());
+                opts.add("@s");
+                Bukkit.getOnlinePlayers().forEach(p -> opts.add(p.getName()));
             } else if (logger.freeform()) {
                 opts.add("full");
             } else {
