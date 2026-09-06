@@ -112,57 +112,56 @@ public final class LabHud {
         final double mspt = server.getAverageTickTimeNanos() / 1_000_000.0D;
         final net.minecraft.server.ServerTickRateManager ticks = server.tickRateManager();
 
-        double tps = 1000.0D / Math.max(ticks.isSprinting() ? 0.0D : ticks.millisecondsPerTick(), mspt);
+        double serverTps = 1000.0D / Math.max(ticks.isSprinting() ? 0.0D : ticks.millisecondsPerTick(), mspt);
         if (ticks.isFrozen()) {
-            tps = 0.0D;
+            serverTps = 0.0D;
         }
-        final String colour = Msg.heatmap(mspt, ticks.millisecondsPerTick());
 
+        // Focused zone information
+        paperlab.zone.ZoneModel focusedZone = null;
+        final paperlab.PaperLabPlugin plugin = paperlab.PaperLabPlugin.get();
+        if (plugin != null) {
+            focusedZone = plugin.zoneService().getFocusedZone(player.getUniqueId());
+        }
+
+        double displayTps = serverTps;
+        double targetMspt = ticks.millisecondsPerTick();
+
+        if (focusedZone != null) {
+            boolean frozen = focusedZone.isFrozen();
+            float rate = focusedZone.tickRate();
+            if (paperlab.core.CoreBridge.PRESENT) {
+                final io.papermc.paper.lab.zone.LabTickZone coreZone =
+                    io.papermc.paper.lab.zone.LabTickZones.findZone(focusedZone.name());
+                if (coreZone != null) {
+                    frozen = coreZone.isFrozen();
+                    rate = coreZone.tickRate();
+                }
+            }
+            if (ticks.isFrozen() || frozen) {
+                displayTps = 0.0D;
+            } else {
+                displayTps = rate * (Math.min(20.0D, serverTps) / 20.0D);
+            }
+            targetMspt = 1000.0D / Math.max(0.1D, rate);
+        }
+
+        final String colour = Msg.heatmap(mspt, targetMspt);
         final List<Object> parts = new ArrayList<>();
-        if (showTps && !showMspt) {
-            // Traditional Carpet behavior for /log tps (shows both TPS and MSPT)
+
+        if (focusedZone != null) {
+            parts.add("c " + focusedZone.name() + ": ");
+        }
+
+        if (showTps) {
             parts.add("g TPS: ");
-            parts.add(String.format(Locale.US, "%s %.1f", colour, tps));
-            parts.add("g  MSPT: ");
-            parts.add(String.format(Locale.US, "%s %.1f", colour, mspt));
-        } else if (showTps && showMspt) {
-            parts.add("g TPS: ");
-            parts.add(String.format(Locale.US, "%s %.1f", colour, tps));
-            parts.add("g  MSPT: ");
+            parts.add(String.format(Locale.US, "%s %.1f", colour, displayTps));
+            parts.add("g   MSPT: ");
             parts.add(String.format(Locale.US, "%s %.1f", colour, mspt));
         } else {
             // Only mspt subscribed
             parts.add("g MSPT: ");
             parts.add(String.format(Locale.US, "%s %.1f", colour, mspt));
-        }
-
-        // Focused zone information
-        final paperlab.PaperLabPlugin plugin = paperlab.PaperLabPlugin.get();
-        if (plugin != null) {
-            final paperlab.zone.ZoneModel zone = plugin.zoneService().getFocusedZone(player.getUniqueId());
-            if (zone != null) {
-                boolean frozen = zone.isFrozen();
-                float rate = zone.tickRate();
-                int step = 0;
-                if (paperlab.core.CoreBridge.PRESENT) {
-                    final io.papermc.paper.lab.zone.LabTickZone coreZone =
-                        io.papermc.paper.lab.zone.LabTickZones.findZone(zone.name());
-                    if (coreZone != null) {
-                        frozen = coreZone.isFrozen();
-                        rate = coreZone.tickRate();
-                        step = coreZone.stepTicks();
-                    }
-                }
-                final String statusStr = frozen ? (step > 0 ? "step" : "frozen") : "running";
-                final String statusColor = frozen ? (step > 0 ? "d " : "c ") : "l ";
-                parts.add("g  [");
-                parts.add("c " + zone.name());
-                parts.add("g :");
-                parts.add(statusColor + statusStr);
-                parts.add("g , ");
-                parts.add(String.format(Locale.US, "w %.1ftps", rate));
-                parts.add("g ]");
-            }
         }
 
         return Msg.c(parts.toArray(new Object[0]));
