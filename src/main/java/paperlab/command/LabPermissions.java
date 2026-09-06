@@ -107,6 +107,15 @@ public final class LabPermissions {
     public static final String CPLAY_PLAYBACK = "paperlab.cplay.playback";
     public static final String CPLAY_CAPTURE = "paperlab.cplay.capture";
     public static final String CPLAY_MANAGE = "paperlab.cplay.manage";
+    public static final String CPLAY_ADMIN = "paperlab.cplay.admin";
+
+    // --- группы wildcard (родительские узлы) ---
+    public static final String LOG_ALL = "paperlab.log.*";
+    public static final String SERVUX_ALL = "paperlab.servux.*";
+    public static final String CPLAY_ALL = "paperlab.cplay.*";
+    public static final String RULE_ALL = "paperlab.rule.*";
+    public static final String COUNTER_ALL = "paperlab.counter.*";
+    public static final String GHOST_ALL = "paperlab.ghost.*";
 
     /**
      * Право сохранять значение правила между перезапусками.
@@ -119,6 +128,9 @@ public final class LabPermissions {
 
     /** Право → описание. Порядок сохраняется, он же порядок регистрации. */
     private static final Map<String, String> NODES = new LinkedHashMap<>();
+
+    /** Промежуточные wildcard-группы → описание. */
+    private static final Map<String, String> GROUPS = new LinkedHashMap<>();
 
     static {
         NODES.put(LOG, "the /log command as a whole");
@@ -153,31 +165,79 @@ public final class LabPermissions {
         NODES.put(CPLAY_PLAYBACK, "playback redstone captures into the world");
         NODES.put(CPLAY_CAPTURE, "capture redstone signals into assets");
         NODES.put(CPLAY_MANAGE, "manage all Capture & Playback assets");
+        NODES.put(CPLAY_ADMIN, "alternative admin permission for Capture & Playback assets");
         NODES.put(RULE_DEFAULT, "persist rule values across restarts");
         // По праву на каждое правило: правила меняют поведение мира, и раздавать их
         // скопом нельзя — кому-то нужен только fillUpdates и ничего больше.
         for (final paperlab.rules.LabRule<?> rule : paperlab.rules.LabRules.all()) {
             NODES.put(rule.permission(), "rule " + rule.name() + ": " + rule.description());
         }
+
+        GROUPS.put(LOG_ALL, "all log subscriptions");
+        GROUPS.put(SERVUX_ALL, "all Servux channels and client mod features");
+        GROUPS.put(CPLAY_ALL, "all Capture & Playback mod integration features");
+        GROUPS.put(RULE_ALL, "all /carpet rules and persistence");
+        GROUPS.put(COUNTER_ALL, "all hopper counter commands and edit permissions");
+        GROUPS.put(GHOST_ALL, "observer mode for self and other players/bots");
     }
 
     private LabPermissions() {
     }
 
     /**
-     * Регистрирует всё дерево. Вызывать один раз при включении плагина.
+     * Регистрирует всё дерево, включая промежуточные wildcard-узлы с привязкой дочерних прав.
+     * Вызывать один раз при включении плагина.
      *
      * <p>Повторную регистрацию Bukkit считает ошибкой, поэтому уже занятые узлы
      * пропускаем: это бывает при {@code /reload}.
      */
     public static void register() {
-        final Map<String, Boolean> children = new LinkedHashMap<>();
+        final Map<String, Boolean> rootChildren = new LinkedHashMap<>();
+
+        // 1. Листовые ноды
         for (final Map.Entry<String, String> node : NODES.entrySet()) {
             add(new Permission(node.getKey(), node.getValue(), PermissionDefault.OP));
-            children.put(node.getKey(), Boolean.TRUE);
+            rootChildren.put(node.getKey(), Boolean.TRUE);
         }
-        add(new Permission(ROOT, "the whole Technical Lab toolset",
-            PermissionDefault.OP, children));
+
+        // 2. Промежуточные wildcard-ноды с явным маппингом дочерних прав (children)
+        registerGroup(LOG_ALL, GROUPS.get(LOG_ALL), rootChildren,
+            LOG, LOG_TPS, LOG_MOBCAPS, LOG_COUNTER, LOG_SPAWN, LOG_ITEM, LOG_MICROTIMING, LOG_MOVEMENT);
+
+        registerGroup(SERVUX_ALL, GROUPS.get(SERVUX_ALL), rootChildren,
+            SERVUX_HUD, SERVUX_SEED, SERVUX_STRUCTURES, SERVUX_LITEMATICS, SERVUX_ENTITIES,
+            SERVUX_ENTITIES_PLAYERS, SERVUX_TWEAKS);
+
+        registerGroup(CPLAY_ALL, GROUPS.get(CPLAY_ALL), rootChildren,
+            CPLAY, CPLAY_PLAYBACK, CPLAY_CAPTURE, CPLAY_MANAGE, CPLAY_ADMIN);
+
+        registerGroup(COUNTER_ALL, GROUPS.get(COUNTER_ALL), rootChildren,
+            COUNTER, COUNTER_EDIT);
+
+        registerGroup(GHOST_ALL, GROUPS.get(GHOST_ALL), rootChildren,
+            GHOST, GHOST_OTHER);
+
+        final Map<String, Boolean> ruleChildren = new LinkedHashMap<>();
+        ruleChildren.put(RULE_DEFAULT, Boolean.TRUE);
+        for (final paperlab.rules.LabRule<?> rule : paperlab.rules.LabRules.all()) {
+            ruleChildren.put(rule.permission(), Boolean.TRUE);
+        }
+        add(new Permission(RULE_ALL, GROUPS.get(RULE_ALL), PermissionDefault.OP, ruleChildren));
+        rootChildren.put(RULE_ALL, Boolean.TRUE);
+
+        // 3. Корень со всеми дочерними элементами
+        add(new Permission(ROOT, "the whole Technical Lab toolset", PermissionDefault.OP, rootChildren));
+    }
+
+    private static void registerGroup(final String groupName, final String description,
+                                      final Map<String, Boolean> rootChildren,
+                                      final String... childrenNodes) {
+        final Map<String, Boolean> children = new LinkedHashMap<>();
+        for (final String child : childrenNodes) {
+            children.put(child, Boolean.TRUE);
+        }
+        add(new Permission(groupName, description, PermissionDefault.OP, children));
+        rootChildren.put(groupName, Boolean.TRUE);
     }
 
     private static void add(final Permission permission) {
@@ -191,8 +251,14 @@ public final class LabPermissions {
         return Map.copyOf(NODES);
     }
 
+    /** Список зарегистрированных wildcard-групп. */
+    public static Map<String, String> groups() {
+        return Map.copyOf(GROUPS);
+    }
+
     /** Порядок вывода — тот же, что при регистрации. */
     public static Iterable<Map.Entry<String, String>> ordered() {
         return NODES.entrySet();
     }
 }
+

@@ -122,6 +122,20 @@ public final class LabCommands {
             .append(Component.text(LabPermissions.ROOT, NamedTextColor.WHITE)
                 .clickEvent(ClickEvent.suggestCommand(
                     "/lp user " + sender.getName() + " permission set " + LabPermissions.ROOT))));
+
+        sender.sendMessage(Component.text("groups:", NamedTextColor.GOLD));
+        for (final var group : LabPermissions.groups().entrySet()) {
+            final boolean has = sender.hasPermission(group.getKey());
+            sender.sendMessage(Component.text(has ? "  * " : "  o ",
+                    has ? NamedTextColor.GREEN : NamedTextColor.DARK_GRAY)
+                .append(Component.text(group.getKey(),
+                    has ? NamedTextColor.WHITE : NamedTextColor.GRAY))
+                .clickEvent(ClickEvent.suggestCommand(
+                    "/lp user " + sender.getName() + " permission set " + group.getKey()))
+                .append(Component.text("  " + group.getValue(), NamedTextColor.DARK_GRAY)));
+        }
+
+        sender.sendMessage(Component.text("nodes:", NamedTextColor.AQUA));
         for (final var node : LabPermissions.ordered()) {
             final boolean has = sender.hasPermission(node.getKey());
             sender.sendMessage(Component.text(has ? "  + " : "  - ",
