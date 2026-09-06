@@ -153,13 +153,15 @@ public final class LabHud {
             parts.add("c " + focusedZone.name() + ": ");
         }
 
-        if (showTps) {
+        if (showTps && showMspt) {
             parts.add("g TPS: ");
             parts.add(String.format(Locale.US, "%s %.1f", colour, displayTps));
             parts.add("g   MSPT: ");
             parts.add(String.format(Locale.US, "%s %.1f", colour, mspt));
-        } else {
-            // Only mspt subscribed
+        } else if (showTps) {
+            parts.add("g TPS: ");
+            parts.add(String.format(Locale.US, "%s %.1f", colour, displayTps));
+        } else if (showMspt) {
             parts.add("g MSPT: ");
             parts.add(String.format(Locale.US, "%s %.1f", colour, mspt));
         }

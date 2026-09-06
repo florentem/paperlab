@@ -401,6 +401,7 @@ public final class ZoneCommands {
         }
 
         service.clearFocus(player.getUniqueId());
+        service.clearHighlight(player.getUniqueId());
         sender.sendMessage(Component.text("[Zone] Unfocused from " + current + ".", NamedTextColor.YELLOW));
         return 1;
     }
