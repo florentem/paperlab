@@ -164,9 +164,15 @@ Paper 26.2 работает в mojang-маппинге, поэтому плаг�
 
 ---
 
-## Лицензия
+## Лицензия и сторонние проекты
 
-**GPL-3.0** — [LICENSE.md](LICENSE.md). Плагин компилируется против серверных внутренностей
-Paper, а те унаследовали GPL от Spigot, Bukkit и CraftBukkit.
+Плагин распространяется под лицензией **GNU General Public License v3.0** — см. [LICENSE.md](LICENSE.md). Плагин компилируется против серверных внутренностей Paper, унаследовавших GPL от Spigot, Bukkit и CraftBukkit.
 
-Форматы протоколов ChunkDebug, Servux, Litematica и Capture & Playback (автор [G4me4u](https://modrinth.com/mod/capture-playback)) восстановлены по спецификациям и сетевым пакетам этих модов; код серверной стороны написан заново под GPL-3.0.
+В проекте используются концепции, сетевые каналы и алгоритмы следующих сторонних проектов:
+* **[PaperMC](https://github.com/PaperMC/Paper)** — лицензия GPL-3.0 (сервер) / MIT (API).
+* **[Fabric Carpet](https://github.com/gnembon/fabric-carpet)** (автор [gnembon](https://github.com/gnembon)) — лицензия MIT. Концепция правил и команд `/carpet`, `/tick`, `/counter`.
+* **[Carpet-TIS-Addition](https://github.com/TISUnion/Carpet-TIS-Addition)** (команда [TIS-Union](https://github.com/TISUnion)) — лицензия LGPL-3.0. Формат и логика логгеров `/log item`, `/log movement`, `/log microtiming`.
+* **[Servux](https://github.com/maruohon/servux), [Litematica](https://github.com/maruohon/litematica), [MiniHUD](https://github.com/maruohon/minihud), [Tweakeroo](https://github.com/maruohon/tweakeroo)** (автор [maruohon](https://github.com/maruohon)) — лицензия LGPL-3.0. Сетевые каналы `servux:*` и алгоритмы геометрических трансформаций схематик.
+* **[Capture & Playback](https://modrinth.com/mod/capture-playback)** (автор [G4me4u](https://github.com/G4me4u)) — чистая независимая реализация серверного протокола G4mespeed (`minecraft:mod/g4mespeed`).
+* **[ChunkDebug](https://github.com/senseiwells/ChunkDebug)** (автор [senseiwells](https://github.com/senseiwells)) — лицензия MIT. Сетевой протокол карты статусов чанков (`chunkdebug:*`).
+
