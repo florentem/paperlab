@@ -19,6 +19,7 @@ import org.bukkit.Color;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import paperlab.command.LabPermissions;
+import paperlab.core.CoreBridge;
 
 /**
  * Brigadier commands for tick zones:
@@ -178,7 +179,27 @@ public final class ZoneCommands {
                             return builder.buildFuture();
                         })
                         .executes(ctx -> executeMemberRemove(ctx.getSource().getSender(), service,
-                            StringArgumentType.getString(ctx, "player"))))));
+                            StringArgumentType.getString(ctx, "player")))))
+            .then(Commands.literal("dump")
+                .executes(ctx -> executeDumpFocused(ctx.getSource().getSender(), service, 100))
+                .then(Commands.literal("status")
+                    .executes(ctx -> executeDumpStatus(ctx.getSource().getSender())))
+                .then(Commands.literal("stop")
+                    .executes(ctx -> executeDumpStop(ctx.getSource().getSender())))
+                .then(Commands.argument("ticks", IntegerArgumentType.integer(1, 100000))
+                    .executes(ctx -> executeDumpFocused(ctx.getSource().getSender(), service, IntegerArgumentType.getInteger(ctx, "ticks"))))
+                .then(Commands.argument("name", StringArgumentType.word())
+                    .suggests((ctx, builder) -> {
+                        for (final ZoneModel z : service.allZones()) {
+                            if (z.name().toLowerCase(Locale.ROOT).startsWith(builder.getRemainingLowerCase())) {
+                                builder.suggest(z.name());
+                            }
+                        }
+                        return builder.buildFuture();
+                    })
+                    .executes(ctx -> executeDumpZone(ctx.getSource().getSender(), service, StringArgumentType.getString(ctx, "name"), 100))
+                    .then(Commands.argument("ticks", IntegerArgumentType.integer(1, 100000))
+                        .executes(ctx -> executeDumpZone(ctx.getSource().getSender(), service, StringArgumentType.getString(ctx, "name"), IntegerArgumentType.getInteger(ctx, "ticks")))))));
     }
 
     /**
@@ -310,7 +331,27 @@ public final class ZoneCommands {
                             return builder.buildFuture();
                         })
                         .executes(ctx -> executeMemberRemove(ctx.getSource().getBukkitSender(), service,
-                            StringArgumentType.getString(ctx, "player"))))));
+                            StringArgumentType.getString(ctx, "player")))))
+            .then(net.minecraft.commands.Commands.literal("dump")
+                .executes(ctx -> executeDumpFocused(ctx.getSource().getBukkitSender(), service, 100))
+                .then(net.minecraft.commands.Commands.literal("status")
+                    .executes(ctx -> executeDumpStatus(ctx.getSource().getBukkitSender())))
+                .then(net.minecraft.commands.Commands.literal("stop")
+                    .executes(ctx -> executeDumpStop(ctx.getSource().getBukkitSender())))
+                .then(net.minecraft.commands.Commands.argument("ticks", IntegerArgumentType.integer(1, 100000))
+                    .executes(ctx -> executeDumpFocused(ctx.getSource().getBukkitSender(), service, IntegerArgumentType.getInteger(ctx, "ticks"))))
+                .then(net.minecraft.commands.Commands.argument("name", StringArgumentType.word())
+                    .suggests((ctx, builder) -> {
+                        for (final ZoneModel z : service.allZones()) {
+                            if (z.name().toLowerCase(Locale.ROOT).startsWith(builder.getRemainingLowerCase())) {
+                                builder.suggest(z.name());
+                            }
+                        }
+                        return builder.buildFuture();
+                    })
+                    .executes(ctx -> executeDumpZone(ctx.getSource().getBukkitSender(), service, StringArgumentType.getString(ctx, "name"), 100))
+                    .then(net.minecraft.commands.Commands.argument("ticks", IntegerArgumentType.integer(1, 100000))
+                        .executes(ctx -> executeDumpZone(ctx.getSource().getBukkitSender(), service, StringArgumentType.getString(ctx, "name"), IntegerArgumentType.getInteger(ctx, "ticks")))))));
     }
 
     // --- Execution Logic ---
@@ -672,5 +713,55 @@ public final class ZoneCommands {
         }
 
         return zone;
+    }
+
+    private static int executeDumpStatus(final CommandSender sender) {
+        if (!CoreBridge.PRESENT) {
+            sender.sendMessage(Component.text("Dump tool requires PaperLab Core.", NamedTextColor.RED));
+            return 0;
+        }
+        sender.sendMessage(Component.text(io.papermc.paper.lab.dump.ZoneDumpManager.getStatus(), NamedTextColor.YELLOW));
+        return 1;
+    }
+
+    private static int executeDumpStop(final CommandSender sender) {
+        if (!CoreBridge.PRESENT) {
+            sender.sendMessage(Component.text("Dump tool requires PaperLab Core.", NamedTextColor.RED));
+            return 0;
+        }
+        sender.sendMessage(Component.text(io.papermc.paper.lab.dump.ZoneDumpManager.stopDump(), NamedTextColor.GOLD));
+        return 1;
+    }
+
+    private static int executeDumpFocused(final CommandSender sender, final ZoneService service, final int ticks) {
+        if (!CoreBridge.PRESENT) {
+            sender.sendMessage(Component.text("Dump tool requires PaperLab Core.", NamedTextColor.RED));
+            return 0;
+        }
+        if (!(sender instanceof final Player player)) {
+            sender.sendMessage(Component.text("Specify a zone name when using console: /zone dump <name> [ticks]", NamedTextColor.RED));
+            return 0;
+        }
+        final ZoneModel zone = service.getFocusedZone(player.getUniqueId());
+        if (zone == null) {
+            sender.sendMessage(Component.text("No zone focused. Use /zone focus <name> or /zone dump <name> [ticks].", NamedTextColor.RED));
+            return 0;
+        }
+        return executeDumpZone(sender, service, zone.name(), ticks);
+    }
+
+    private static int executeDumpZone(final CommandSender sender, final ZoneService service, final String zoneName, final int ticks) {
+        if (!CoreBridge.PRESENT) {
+            sender.sendMessage(Component.text("Dump tool requires PaperLab Core.", NamedTextColor.RED));
+            return 0;
+        }
+        final io.papermc.paper.lab.zone.LabTickZone coreZone = io.papermc.paper.lab.zone.LabTickZones.findZone(zoneName);
+        if (coreZone == null) {
+            sender.sendMessage(Component.text("Zone not found in core: " + zoneName, NamedTextColor.RED));
+            return 0;
+        }
+        final String res = io.papermc.paper.lab.dump.ZoneDumpManager.startZoneDump(coreZone, ticks);
+        sender.sendMessage(Component.text(res, NamedTextColor.GREEN));
+        return 1;
     }
 }
