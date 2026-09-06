@@ -1,5 +1,6 @@
 package paperlab.zone;
 
+import com.mojang.brigadier.arguments.FloatArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
@@ -179,7 +180,7 @@ public final class ZoneCommands {
                             return builder.buildFuture();
                         })
                         .executes(ctx -> executeMemberRemove(ctx.getSource().getSender(), service,
-                            StringArgumentType.getString(ctx, "player")))))
+                            StringArgumentType.getString(ctx, "player"))))))
             .then(Commands.literal("dump")
                 .executes(ctx -> executeDumpFocused(ctx.getSource().getSender(), service, 100))
                 .then(Commands.literal("status")
@@ -199,7 +200,87 @@ public final class ZoneCommands {
                     })
                     .executes(ctx -> executeDumpZone(ctx.getSource().getSender(), service, StringArgumentType.getString(ctx, "name"), 100))
                     .then(Commands.argument("ticks", IntegerArgumentType.integer(1, 100000))
-                        .executes(ctx -> executeDumpZone(ctx.getSource().getSender(), service, StringArgumentType.getString(ctx, "name"), IntegerArgumentType.getInteger(ctx, "ticks")))))));
+                        .executes(ctx -> executeDumpZone(ctx.getSource().getSender(), service, StringArgumentType.getString(ctx, "name"), IntegerArgumentType.getInteger(ctx, "ticks"))))))
+            .then(Commands.literal("rate")
+                .then(Commands.argument("name", StringArgumentType.word())
+                    .suggests((ctx, builder) -> {
+                        for (final ZoneModel z : service.allZones()) {
+                            if (z.name().toLowerCase(Locale.ROOT).startsWith(builder.getRemainingLowerCase())) {
+                                builder.suggest(z.name());
+                            }
+                        }
+                        return builder.buildFuture();
+                    })
+                    .then(Commands.argument("rate", FloatArgumentType.floatArg(0.1F, 10000.0F))
+                        .executes(ctx -> executeRate(ctx.getSource().getSender(), service,
+                            StringArgumentType.getString(ctx, "name"),
+                            FloatArgumentType.getFloat(ctx, "rate"))))))
+            .then(Commands.literal("freeze")
+                .then(Commands.argument("name", StringArgumentType.word())
+                    .suggests((ctx, builder) -> {
+                        for (final ZoneModel z : service.allZones()) {
+                            if (z.name().toLowerCase(Locale.ROOT).startsWith(builder.getRemainingLowerCase())) {
+                                builder.suggest(z.name());
+                            }
+                        }
+                        return builder.buildFuture();
+                    })
+                    .executes(ctx -> executeFreezeToggle(ctx.getSource().getSender(), service,
+                        StringArgumentType.getString(ctx, "name")))))
+            .then(Commands.literal("unfreeze")
+                .then(Commands.argument("name", StringArgumentType.word())
+                    .suggests((ctx, builder) -> {
+                        for (final ZoneModel z : service.allZones()) {
+                            if (z.name().toLowerCase(Locale.ROOT).startsWith(builder.getRemainingLowerCase())) {
+                                builder.suggest(z.name());
+                            }
+                        }
+                        return builder.buildFuture();
+                    })
+                    .executes(ctx -> executeFreeze(ctx.getSource().getSender(), service,
+                        StringArgumentType.getString(ctx, "name"), false))))
+            .then(Commands.literal("step")
+                .then(Commands.argument("name", StringArgumentType.word())
+                    .suggests((ctx, builder) -> {
+                        for (final ZoneModel z : service.allZones()) {
+                            if (z.name().toLowerCase(Locale.ROOT).startsWith(builder.getRemainingLowerCase())) {
+                                builder.suggest(z.name());
+                            }
+                        }
+                        return builder.buildFuture();
+                    })
+                    .then(Commands.argument("ticks", IntegerArgumentType.integer(1, 100000))
+                        .executes(ctx -> executeStep(ctx.getSource().getSender(), service,
+                            StringArgumentType.getString(ctx, "name"),
+                            IntegerArgumentType.getInteger(ctx, "ticks"))))))
+            .then(Commands.literal("sprint")
+                .then(Commands.argument("name", StringArgumentType.word())
+                    .suggests((ctx, builder) -> {
+                        for (final ZoneModel z : service.allZones()) {
+                            if (z.name().toLowerCase(Locale.ROOT).startsWith(builder.getRemainingLowerCase())) {
+                                builder.suggest(z.name());
+                            }
+                        }
+                        return builder.buildFuture();
+                    })
+                    .then(Commands.argument("ticks", IntegerArgumentType.integer(1, 100000))
+                        .executes(ctx -> executeSprint(ctx.getSource().getSender(), service,
+                            StringArgumentType.getString(ctx, "name"),
+                            IntegerArgumentType.getInteger(ctx, "ticks"))))))
+            .then(Commands.literal("warp")
+                .then(Commands.argument("name", StringArgumentType.word())
+                    .suggests((ctx, builder) -> {
+                        for (final ZoneModel z : service.allZones()) {
+                            if (z.name().toLowerCase(Locale.ROOT).startsWith(builder.getRemainingLowerCase())) {
+                                builder.suggest(z.name());
+                            }
+                        }
+                        return builder.buildFuture();
+                    })
+                    .then(Commands.argument("ticks", IntegerArgumentType.integer(1, 100000))
+                        .executes(ctx -> executeSprint(ctx.getSource().getSender(), service,
+                            StringArgumentType.getString(ctx, "name"),
+                            IntegerArgumentType.getInteger(ctx, "ticks"))))));
     }
 
     /**
@@ -331,7 +412,7 @@ public final class ZoneCommands {
                             return builder.buildFuture();
                         })
                         .executes(ctx -> executeMemberRemove(ctx.getSource().getBukkitSender(), service,
-                            StringArgumentType.getString(ctx, "player")))))
+                            StringArgumentType.getString(ctx, "player"))))))
             .then(net.minecraft.commands.Commands.literal("dump")
                 .executes(ctx -> executeDumpFocused(ctx.getSource().getBukkitSender(), service, 100))
                 .then(net.minecraft.commands.Commands.literal("status")
@@ -351,8 +432,9 @@ public final class ZoneCommands {
                     })
                     .executes(ctx -> executeDumpZone(ctx.getSource().getBukkitSender(), service, StringArgumentType.getString(ctx, "name"), 100))
                     .then(net.minecraft.commands.Commands.argument("ticks", IntegerArgumentType.integer(1, 100000))
-                        .executes(ctx -> executeDumpZone(ctx.getSource().getBukkitSender(), service, StringArgumentType.getString(ctx, "name"), IntegerArgumentType.getInteger(ctx, "ticks")))))));
+                        .executes(ctx -> executeDumpZone(ctx.getSource().getBukkitSender(), service, StringArgumentType.getString(ctx, "name"), IntegerArgumentType.getInteger(ctx, "ticks"))))));
     }
+
 
     // --- Execution Logic ---
 
@@ -408,7 +490,8 @@ public final class ZoneCommands {
     }
 
     private static int executeFocus(final CommandSender sender, final ZoneService service, final String name) {
-        if (!(sender instanceof final Player player)) {
+        final Player player = resolvePlayer(sender);
+        if (player == null) {
             sender.sendMessage(Component.text("[Zone] Only players can focus zones.", NamedTextColor.RED));
             return 0;
         }
@@ -430,7 +513,8 @@ public final class ZoneCommands {
     }
 
     private static int executeUnfocus(final CommandSender sender, final ZoneService service) {
-        if (!(sender instanceof final Player player)) {
+        final Player player = resolvePlayer(sender);
+        if (player == null) {
             sender.sendMessage(Component.text("[Zone] Only players can unfocus.", NamedTextColor.RED));
             return 0;
         }
@@ -763,5 +847,91 @@ public final class ZoneCommands {
         final String res = io.papermc.paper.lab.dump.ZoneDumpManager.startZoneDump(coreZone, ticks);
         sender.sendMessage(Component.text(res, NamedTextColor.GREEN));
         return 1;
+    }
+
+    private static int executeRate(final CommandSender sender, final ZoneService service, final String name, final float rate) {
+        final ZoneModel zone = service.getZone(name);
+        if (zone == null) {
+            sender.sendMessage(Component.text("[Zone] Zone '" + name + "' not found.", NamedTextColor.RED));
+            return 0;
+        }
+        service.setZoneTickRate(zone, rate);
+        sender.sendMessage(Component.text("[Zone " + name + "] Tick rate set to " + rate + " r/s.", NamedTextColor.GREEN));
+        return 1;
+    }
+
+    private static int executeFreezeToggle(final CommandSender sender, final ZoneService service, final String name) {
+        final ZoneModel zone = service.getZone(name);
+        if (zone == null) {
+            sender.sendMessage(Component.text("[Zone] Zone '" + name + "' not found.", NamedTextColor.RED));
+            return 0;
+        }
+        final boolean newFreeze = !zone.isFrozen();
+        service.setZoneFrozen(zone, newFreeze);
+        sender.sendMessage(Component.text("[Zone " + name + "] " + (newFreeze ? "Frozen." : "Unfrozen."),
+            newFreeze ? NamedTextColor.AQUA : NamedTextColor.GREEN));
+        return 1;
+    }
+
+    private static int executeFreeze(final CommandSender sender, final ZoneService service, final String name, final boolean freeze) {
+        final ZoneModel zone = service.getZone(name);
+        if (zone == null) {
+            sender.sendMessage(Component.text("[Zone] Zone '" + name + "' not found.", NamedTextColor.RED));
+            return 0;
+        }
+        service.setZoneFrozen(zone, freeze);
+        sender.sendMessage(Component.text("[Zone " + name + "] " + (freeze ? "Frozen." : "Unfrozen."),
+            freeze ? NamedTextColor.AQUA : NamedTextColor.GREEN));
+        return 1;
+    }
+
+    private static int executeStep(final CommandSender sender, final ZoneService service, final String name, final int ticks) {
+        final ZoneModel zone = service.getZone(name);
+        if (zone == null) {
+            sender.sendMessage(Component.text("[Zone] Zone '" + name + "' not found.", NamedTextColor.RED));
+            return 0;
+        }
+        if (!zone.isFrozen()) {
+            sender.sendMessage(Component.text("[Zone " + name + "] Zone is not frozen.", NamedTextColor.RED));
+            return 0;
+        }
+        final boolean success = service.stepZone(zone, ticks);
+        if (success) {
+            sender.sendMessage(Component.text("[Zone " + name + "] Stepping " + ticks + " ticks.", NamedTextColor.AQUA));
+            return 1;
+        } else {
+            sender.sendMessage(Component.text("[Zone " + name + "] Failed to step zone.", NamedTextColor.RED));
+            return 0;
+        }
+    }
+
+    private static int executeSprint(final CommandSender sender, final ZoneService service, final String name, final int ticks) {
+        final ZoneModel zone = service.getZone(name);
+        if (zone == null) {
+            sender.sendMessage(Component.text("[Zone] Zone '" + name + "' not found.", NamedTextColor.RED));
+            return 0;
+        }
+        final boolean success = service.sprintZone(zone, ticks);
+        if (success) {
+            sender.sendMessage(Component.text("[Zone " + name + "] Sprinting " + ticks + " ticks.", NamedTextColor.AQUA));
+            return 1;
+        } else {
+            sender.sendMessage(Component.text("[Zone " + name + "] Failed to sprint zone.", NamedTextColor.RED));
+            return 0;
+        }
+    }
+
+    private static CommandSender getSender(final net.minecraft.commands.CommandSourceStack source) {
+        if (source.getEntity() instanceof final net.minecraft.server.level.ServerPlayer sp) {
+            return sp.getBukkitEntity();
+        }
+        return source.getBukkitSender();
+    }
+
+    private static Player resolvePlayer(final CommandSender sender) {
+        if (sender instanceof final Player player) {
+            return player;
+        }
+        return Bukkit.getPlayerExact(sender.getName());
     }
 }

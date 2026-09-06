@@ -97,6 +97,21 @@ public final class LabRules {
         value -> null,
         value -> LabRuleState.fillUpdates = value), "creative", "command");
 
+    /**
+     * Whether block updates, neighbour updates, and shape updates occur.
+     * When false, all neighbour updates and physics updates are suppressed.
+     */
+    public static final LabRule<Boolean> BLOCK_UPDATES = register(new LabRule<>(
+        "blockUpdates",
+        "Whether block and neighbour updates occur in the world",
+        "false = disables all neighbour and shape updates",
+        Boolean.TRUE,
+        List.of("true", "false"),
+        BOOLEAN,
+        PLAIN::apply,
+        value -> null,
+        value -> LabRuleState.blockUpdates = value), "creative", "command");
+
     /** Whether our additions to vanilla {@code /tick} apply. The name follows Carpet. */
     public static final LabRule<Boolean> TICK_COMMAND_CARPETFIED = register(new LabRule<>(
         "tickCommandCarpetfied",

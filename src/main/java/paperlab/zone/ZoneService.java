@@ -186,6 +186,20 @@ public final class ZoneService {
         save();
     }
 
+    public boolean stepZone(final ZoneModel zone, final int ticks) {
+        if (CoreBridge.PRESENT) {
+            return CoreDelegate.step(zone.world(), zone.name(), ticks);
+        }
+        return false;
+    }
+
+    public boolean sprintZone(final ZoneModel zone, final int ticks) {
+        if (CoreBridge.PRESENT) {
+            return CoreDelegate.sprint(zone.world(), zone.name(), ticks);
+        }
+        return false;
+    }
+
     public void addMemberToZone(final ZoneModel zone, final UUID member) {
         zone.addMember(member);
         if (CoreBridge.PRESENT) {
@@ -604,6 +618,14 @@ public final class ZoneService {
             if (coreZone != null) {
                 coreZone.setTickRate(tickRate);
             }
+        }
+
+        static boolean step(final String world, final String name, final int ticks) {
+            return io.papermc.paper.lab.zone.LabTickZones.stepZone(name, ticks);
+        }
+
+        static boolean sprint(final String world, final String name, final int ticks) {
+            return io.papermc.paper.lab.zone.LabTickZones.sprintZone(name, ticks);
         }
 
         static void addMember(final String world, final String name, final UUID member) {
