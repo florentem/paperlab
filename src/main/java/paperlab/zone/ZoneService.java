@@ -441,6 +441,16 @@ public final class ZoneService {
     private record SerializedZone(String name, String world, String owner, List<String> members, List<ZoneBox> boxes, boolean frozen, float tickRate) {}
 
     private void save() {
+        if (CoreBridge.PRESENT) {
+            for (final ZoneModel zone : this.zones.values()) {
+                final io.papermc.paper.lab.zone.LabTickZone coreZone =
+                    io.papermc.paper.lab.zone.LabTickZones.getZone(zone.world(), zone.name());
+                if (coreZone != null) {
+                    zone.setFrozen(coreZone.isFrozen());
+                    zone.setTickRate(coreZone.tickRate());
+                }
+            }
+        }
         final List<SerializedZone> list = new ArrayList<>();
         for (final ZoneModel zone : this.zones.values()) {
             final List<String> memberList = new ArrayList<>();
