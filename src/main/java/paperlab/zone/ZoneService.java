@@ -458,7 +458,7 @@ public final class ZoneService {
             ));
         }
 
-        Bukkit.getScheduler().runTaskAsynchronously(this.plugin, () -> {
+        final Runnable saveTask = () -> {
             synchronized (this.storagePath) {
                 try {
                     Files.createDirectories(this.storagePath.getParent());
@@ -469,7 +469,13 @@ public final class ZoneService {
                     this.plugin.getLogger().log(Level.WARNING, "Failed to save zones to " + this.storagePath, e);
                 }
             }
-        });
+        };
+
+        if (!this.plugin.isEnabled()) {
+            saveTask.run();
+        } else {
+            Bukkit.getScheduler().runTaskAsynchronously(this.plugin, saveTask);
+        }
     }
 
     private synchronized void load() {
